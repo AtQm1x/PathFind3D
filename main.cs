@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Drawing;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Xml.Linq;
 using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
@@ -9,6 +11,7 @@ using OpenTK.Windowing.Desktop;
 using OpenTK.Windowing.GraphicsLibraryFramework;
 using OpenTKBase;
 using PathFind3D;
+using static OpenTKBase.GraphNode;
 
 namespace program
 {
@@ -22,15 +25,14 @@ namespace program
         private float aspectRatio = 16f / 9;
         private float nodeDistance = 0.125f;
         Random rng = new();
-
-        const int gridSize = 16;
-
+        const int gridSize = 32;
         private bool exit = false;
-
         private Matrix4 projectionMatrix;
         private Matrix4 viewMatrix;
         private float zoom = 1.0f;
         private Vector3 cameraPosition = new Vector3(0, 0, 1);
+        GraphNode[,,] grid;
+        Vector3 rot = new(0);
 
         public main(int resX, int resY, string title)
         {
@@ -105,9 +107,6 @@ namespace program
 
         public void Shutdown() { }
 
-        GraphNode[,,] grid;
-
-        Vector3 rot = new(0);
 
         private void rebuildGrid()
         {
@@ -124,7 +123,7 @@ namespace program
                         float posY = j * nodeDistance - startOffset;
                         float posZ = k * nodeDistance - startOffset;
                         GraphNode nd = new GraphNode(posX, posY, posZ);
-                        if (rng.NextDouble() >= 0.05)
+                        if (rng.NextDouble() >= 0.005)
                         {
                             nd.DrawMD = GraphNode.DrawMode.None;
                         }
@@ -178,25 +177,34 @@ namespace program
 
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
-            foreach (GraphNode node in grid)
-            {
-                node.Draw(viewMatrix, projectionMatrix);
-            }
+            drawGrid();
 
-            var boxNode = new GraphNode(0.125f / 2, 0.125f / 2, 0.125f / 2);
-            boxNode.BaseSize = MtH.cubeRootF(grid.Length) * 0.125f + 0.01f;
-            boxNode.Rotation = rot;
-            boxNode.AspectRatio = aspectRatio;
+            var boxNode = new GraphNode(0.125f / 2, 0.125f / 2, 0.125f / 2)
+            {
+                BaseSize = MtH.cubeRootF(grid.Length) * 0.125f + 0.01f,
+                Rotation = rot,
+                AspectRatio = aspectRatio,
+                DrawMD = DrawMode.Wireframe
+            };
             boxNode.updateCenter(viewMatrix, projectionMatrix);
-            boxNode.DrawMD = GraphNode.DrawMode.Wireframe;
             boxNode.Draw(viewMatrix, projectionMatrix);
             window?.SwapBuffers();
         }
 
+        private void drawGrid()
+        {
+            foreach (GraphNode node in grid)
+            {
+                if (node.DrawMD == DrawMode.None)
+                    continue;
+                node.Draw(viewMatrix, projectionMatrix);
+            }
+        }
+
         private void onMouseWheel(MouseWheelEventArgs e)
         {
-            zoom -= e.OffsetY * 0.1f;
-            zoom = Math.Max(0.1f, Math.Min(zoom, 20.0f));
+            zoom -= e.OffsetY * 0.2f;
+            zoom = Math.Max(0.1f, Math.Min(zoom, 1000.0f));
             cameraPosition.Z = zoom;
             UpdateViewMatrix();
         }

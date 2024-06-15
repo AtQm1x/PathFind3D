@@ -8,10 +8,11 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using System.Xml.Linq;
 
 namespace OpenTKBase
 {
-    internal class GraphNode
+    public class GraphNode
     {
         public Vector3 Position { get; private set; }
         public GraphNode? Parent { get; set; } = null;
@@ -40,20 +41,21 @@ namespace OpenTKBase
     };
         float[] cubeVertices = new float[8 * 3];
 
-        int[] lineIndices = {
-    // First Quad
-    0, 1, 1, 3, 3, 2, 2, 0,
-    // Second Quad
-    2, 3, 3, 5, 5, 4, 4, 2,
-    // Third Quad
-    4, 5, 5, 7, 7, 6, 6, 4,
-    // Fourth Quad
-    6, 7, 7, 1, 1, 0, 0, 6,
-    // Fifth Quad
-    1, 7, 7, 5, 5, 3, 3, 1,
-    // Sixth Quad
-    6, 0, 0, 2, 2, 4, 4, 6
-};
+        int[] lineIndices =
+        {
+            // First Quad
+            0, 1, 1, 3, 3, 2, 2, 0,
+            // Second Quad
+            2, 3, 3, 5, 5, 4, 4, 2,
+            // Third Quad
+            4, 5, 5, 7, 7, 6, 6, 4,
+            // Fourth Quad
+            6, 7, 7, 1, 1, 0, 0, 6,
+            // Fifth Quad
+            1, 7, 7, 5, 5, 3, 3, 1,
+            // Sixth Quad
+            6, 0, 0, 2, 2, 4, 4, 6
+        };
 
         public GraphNode(Vector3 position)
         {
@@ -111,6 +113,8 @@ namespace OpenTKBase
 
         public void Draw(Matrix4 viewMatrix, Matrix4 projectionMatrix)
         {
+            if (DrawMD == DrawMode.None)
+                return;
             if (cubeVertices[0] != -0.500000f * BaseSize)
             {
                 cubeVertices = new float[]
