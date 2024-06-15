@@ -22,6 +22,7 @@ namespace OpenTKBase
         public DrawMode DrawMD { get; set; } = DrawMode.Both;
         public enum DrawMode { Fill, Wireframe, Both, None };
         public Vector3 center = new(0, 0, 0);
+
         int[] cubeIndices =
         {
         0, 1, 2,
@@ -38,6 +39,16 @@ namespace OpenTKBase
         4, 0, 2
     };
         float[] cubeVertices = new float[8 * 3];
+
+        int[] lineIndices =
+            {
+                // Front face
+                0, 1, 1, 2, 2, 3, 3, 0,
+                // Back face
+                4, 5, 5, 6, 6, 7, 7, 4,
+                // Connecting edges
+                0, 4, 1, 5, 2, 6, 3, 7
+            };
 
         public GraphNode(Vector3 position)
         {
@@ -137,8 +148,8 @@ namespace OpenTKBase
                 // Draw wireframe overlay
                 GL.Color4(0.0f, 0.0f, 0.0f, 1.0f);
                 GL.PolygonMode(MaterialFace.Front, PolygonMode.Line);
-                GL.VertexPointer(3, VertexPointerType.Float, 0, cubeVertices);
-                GL.DrawElements(PrimitiveType.Triangles, cubeIndices.Length, DrawElementsType.UnsignedInt, cubeIndices);
+                GL.VertexPointer(2, VertexPointerType.Float, 0, cubeVertices);
+                GL.DrawElements(PrimitiveType.Lines, lineIndices.Length, DrawElementsType.UnsignedInt, lineIndices);
             }
 
             GL.DisableClientState(ArrayCap.VertexArray);

@@ -105,21 +105,20 @@ namespace program
 
         public void Shutdown() { }
 
-        GraphNode[,,] graph;
+        GraphNode[,,] grid;
 
         Vector3 rot = new(0);
 
         private void rebuildGrid()
         {
-            graph = new GraphNode[gridSize, gridSize, gridSize];
-            float startOffset = ((int)MtH.cubeRoot(graph.Length) - 1) * nodeDistance / 2;
+            grid = new GraphNode[gridSize, gridSize, gridSize];
+            float startOffset = ((int)MtH.cubeRoot(grid.Length) - 1) * nodeDistance / 2;
 
-            int index = 0;
-            for (int i = 0; i < MtH.cubeRoot(graph.Length); i++)
+            for (int i = 0; i < MtH.cubeRoot(grid.Length); i++)
             {
-                for (int j = 0; j < MtH.cubeRoot(graph.Length); j++)
+                for (int j = 0; j < MtH.cubeRoot(grid.Length); j++)
                 {
-                    for (int k = 0; k < MtH.cubeRoot(graph.Length); k++)
+                    for (int k = 0; k < MtH.cubeRoot(grid.Length); k++)
                     {
                         float posX = i * nodeDistance - startOffset;
                         float posY = j * nodeDistance - startOffset;
@@ -133,7 +132,7 @@ namespace program
                         {
                             nd.DrawMD = GraphNode.DrawMode.Both;
                         }
-                        graph[index++] = nd;
+                        grid[i, j, k] = nd;
                     }
                 }
             }
@@ -162,13 +161,12 @@ namespace program
                 rebuildGrid();
             }
 
-            foreach (GraphNode node in graph)
+            foreach (GraphNode node in grid)
             {
                 node.Rotation = rot;
                 node.AspectRatio = aspectRatio;
                 node.updateCenter(viewMatrix, projectionMatrix);
             }
-
 
             runAction?.Invoke();
         }
@@ -180,18 +178,18 @@ namespace program
 
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
-            foreach (GraphNode node in graph)
+            foreach (GraphNode node in grid)
             {
                 node.Draw(viewMatrix, projectionMatrix);
             }
 
-            var nd = new GraphNode(0.125f / 2, 0.125f / 2, 0.125f / 2);
-            nd.BaseSize = MtH.cubeRootF(graph.Length) * 0.125f + 0.01f;
-            nd.Rotation = rot;
-            nd.AspectRatio = aspectRatio;
-            nd.updateCenter(viewMatrix, projectionMatrix);
-            nd.DrawMD = GraphNode.DrawMode.Wireframe;
-            nd.Draw(viewMatrix, projectionMatrix);
+            var boxNode = new GraphNode(0.125f / 2, 0.125f / 2, 0.125f / 2);
+            boxNode.BaseSize = MtH.cubeRootF(grid.Length) * 0.125f + 0.01f;
+            boxNode.Rotation = rot;
+            boxNode.AspectRatio = aspectRatio;
+            boxNode.updateCenter(viewMatrix, projectionMatrix);
+            boxNode.DrawMD = GraphNode.DrawMode.Wireframe;
+            boxNode.Draw(viewMatrix, projectionMatrix);
             window?.SwapBuffers();
         }
 
