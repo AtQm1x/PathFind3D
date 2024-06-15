@@ -40,15 +40,20 @@ namespace OpenTKBase
     };
         float[] cubeVertices = new float[8 * 3];
 
-        int[] lineIndices =
-            {
-                // Front face
-                0, 1, 1, 2, 2, 3, 3, 0,
-                // Back face
-                4, 5, 5, 6, 6, 7, 7, 4,
-                // Connecting edges
-                0, 4, 1, 5, 2, 6, 3, 7
-            };
+        int[] lineIndices = {
+    // First Quad
+    0, 1, 1, 3, 3, 2, 2, 0,
+    // Second Quad
+    2, 3, 3, 5, 5, 4, 4, 2,
+    // Third Quad
+    4, 5, 5, 7, 7, 6, 6, 4,
+    // Fourth Quad
+    6, 7, 7, 1, 1, 0, 0, 6,
+    // Fifth Quad
+    1, 7, 7, 5, 5, 3, 3, 1,
+    // Sixth Quad
+    6, 0, 0, 2, 2, 4, 4, 6
+};
 
         public GraphNode(Vector3 position)
         {
@@ -148,7 +153,7 @@ namespace OpenTKBase
                 // Draw wireframe overlay
                 GL.Color4(0.0f, 0.0f, 0.0f, 1.0f);
                 GL.PolygonMode(MaterialFace.Front, PolygonMode.Line);
-                GL.VertexPointer(2, VertexPointerType.Float, 0, cubeVertices);
+                GL.VertexPointer(3, VertexPointerType.Float, 0, cubeVertices);
                 GL.DrawElements(PrimitiveType.Lines, lineIndices.Length, DrawElementsType.UnsignedInt, lineIndices);
             }
 
