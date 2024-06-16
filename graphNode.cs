@@ -1,28 +1,20 @@
-﻿using OpenTK.Mathematics;
-using OpenTK.Graphics.OpenGL;
-using OpenTK.Windowing.Common;
-using OpenTK.Windowing.Desktop;
-using OpenTK.Windowing.GraphicsLibraryFramework;
-using System;
+﻿using OpenTK.Graphics.OpenGL;
+using OpenTK.Mathematics;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Xml.Linq;
 
 namespace OpenTKBase
 {
+    public enum DrawMode { Fill, Wireframe, Both, None, Start, End }
     public class GraphNode
     {
         public Vector3 Position { get; private set; }
         public GraphNode? Parent { get; set; } = null;
-        public List<GraphNode> Connections { get; } = new();
+        public List<GraphNode> Connections { get; set; } = new();
         public float AspectRatio { get; set; } = 1;
         public Vector3 Rotation { get; set; } = new(0, 0, 0);
         public float BaseSize = 0.125f;
         public DrawMode DrawMD { get; set; } = DrawMode.Both;
-        public enum DrawMode { Fill, Wireframe, Both, None };
-        public Vector3 center = new(0, 0, 0);
+
 
         int[] cubeIndices =
         {
@@ -39,63 +31,57 @@ namespace OpenTKBase
         6, 0, 4,
         4, 0, 2
     };
+
         float[] cubeVertices = new float[8 * 3];
 
         int[] lineIndices =
         {
-            // First Quad
-            0, 1, 1, 3, 3, 2, 2, 0,
-            // Second Quad
-            2, 3, 3, 5, 5, 4, 4, 2,
-            // Third Quad
-            4, 5, 5, 7, 7, 6, 6, 4,
-            // Fourth Quad
-            6, 7, 7, 1, 1, 0, 0, 6,
-            // Fifth Quad
-            1, 7, 7, 5, 5, 3, 3, 1,
-            // Sixth Quad
-            6, 0, 0, 2, 2, 4, 4, 6
-        };
+        // First Quad
+        0, 1, 1, 3, 3, 2, 2, 0,
+        // Second Quad
+        2, 3, 3, 5, 5, 4, 4, 2,
+        // Third Quad
+        4, 5, 5, 7, 7, 6, 6, 4,
+        // Fourth Quad
+        6, 7, 7, 1, 1, 0, 0, 6,
+        // Fifth Quad
+        1, 7, 7, 5, 5, 3, 3, 1,
+        // Sixth Quad
+        6, 0, 0, 2, 2, 4, 4, 6
+    };
 
         public GraphNode(Vector3 position)
         {
             Position = position;
-            updateCenter(Matrix4.Identity, Matrix4.Identity);
-            cubeVertices = new float[]
-            {
-                -0.500000f * BaseSize, -0.500000f * BaseSize, 0.500000f * BaseSize,
-                0.500000f * BaseSize, -0.500000f * BaseSize, 0.500000f * BaseSize,
-                 -0.500000f * BaseSize, 0.500000f * BaseSize, 0.500000f * BaseSize,
-                 0.500000f * BaseSize, 0.500000f * BaseSize, 0.500000f * BaseSize,
-                 -0.500000f * BaseSize, 0.500000f * BaseSize, -0.500000f * BaseSize,
-                 0.500000f * BaseSize, 0.500000f * BaseSize, -0.500000f * BaseSize,
-                 -0.500000f * BaseSize, -0.500000f * BaseSize, -0.500000f * BaseSize,
-                 0.500000f * BaseSize, -0.500000f * BaseSize, -0.500000f * BaseSize
-            };
+            InitializeCubeVertices();
         }
 
         public GraphNode(float x, float y, float z)
         {
-            Position = (x, y, z);
-            updateCenter(Matrix4.Identity, Matrix4.Identity);
-            cubeVertices = new float[]
-            {
-                -0.500000f * BaseSize, -0.500000f * BaseSize, 0.500000f * BaseSize,
-                0.500000f * BaseSize, -0.500000f * BaseSize, 0.500000f * BaseSize,
-                 -0.500000f * BaseSize, 0.500000f * BaseSize, 0.500000f * BaseSize,
-                 0.500000f * BaseSize, 0.500000f * BaseSize, 0.500000f * BaseSize,
-                 -0.500000f * BaseSize, 0.500000f * BaseSize, -0.500000f * BaseSize,
-                 0.500000f * BaseSize, 0.500000f * BaseSize, -0.500000f * BaseSize,
-                 -0.500000f * BaseSize, -0.500000f * BaseSize, -0.500000f * BaseSize,
-                 0.500000f * BaseSize, -0.500000f * BaseSize, -0.500000f * BaseSize
-            };
+            Position = new Vector3(x, y, z);
+            InitializeCubeVertices();
         }
 
         public GraphNode(Vector3 position, DrawMode drawMode)
         {
             Position = position;
-            updateCenter(Matrix4.Identity, Matrix4.Identity);
             DrawMD = drawMode;
+            InitializeCubeVertices();
+        }
+
+        private void InitializeCubeVertices()
+        {
+            cubeVertices = new float[]
+            {
+            -0.500000f * BaseSize, -0.500000f * BaseSize, 0.500000f * BaseSize,
+            0.500000f * BaseSize, -0.500000f * BaseSize, 0.500000f * BaseSize,
+            -0.500000f * BaseSize, 0.500000f * BaseSize, 0.500000f * BaseSize,
+            0.500000f * BaseSize, 0.500000f * BaseSize, 0.500000f * BaseSize,
+            -0.500000f * BaseSize, 0.500000f * BaseSize, -0.500000f * BaseSize,
+            0.500000f * BaseSize, 0.500000f * BaseSize, -0.500000f * BaseSize,
+            -0.500000f * BaseSize, -0.500000f * BaseSize, -0.500000f * BaseSize,
+            0.500000f * BaseSize, -0.500000f * BaseSize, -0.500000f * BaseSize
+            };
         }
 
         private Matrix4 CreateRotationMatrix(Vector3 rotation)
@@ -106,28 +92,32 @@ namespace OpenTKBase
             return rotMatZ * rotMatY * rotMatX;
         }
 
-        public void updateCenter(Matrix4 viewMatrix, Matrix4 projectionMatrix)
+        private void drawWireframe()
         {
-            center = Vector3.TransformPosition(Position, CreateRotationMatrix(Rotation) * viewMatrix * projectionMatrix);
+            // Draw wireframe overlay
+            GL.Color4(0.0f, 0.0f, 0.0f, 1.0f);
+            GL.PolygonMode(MaterialFace.Front, PolygonMode.Line);
+            GL.VertexPointer(3, VertexPointerType.Float, 0, cubeVertices);
+            GL.DrawElements(PrimitiveType.Lines, lineIndices.Length, DrawElementsType.UnsignedInt, lineIndices);
+        }
+
+        private void fillCube(Vector4 color)
+        {
+            // Draw filled polygons
+            GL.Color4(color);
+            GL.PolygonMode(MaterialFace.Front, PolygonMode.Fill);
+            GL.VertexPointer(3, VertexPointerType.Float, 0, cubeVertices);
+            GL.DrawElements(PrimitiveType.Triangles, cubeIndices.Length, DrawElementsType.UnsignedInt, cubeIndices);
         }
 
         public void Draw(Matrix4 viewMatrix, Matrix4 projectionMatrix)
         {
             if (DrawMD == DrawMode.None)
                 return;
+
             if (cubeVertices[0] != -0.500000f * BaseSize)
             {
-                cubeVertices = new float[]
-            {
-                -0.500000f * BaseSize, -0.500000f * BaseSize, 0.500000f * BaseSize,
-                0.500000f * BaseSize, -0.500000f * BaseSize, 0.500000f * BaseSize,
-                 -0.500000f * BaseSize, 0.500000f * BaseSize, 0.500000f * BaseSize,
-                 0.500000f * BaseSize, 0.500000f * BaseSize, 0.500000f * BaseSize,
-                 -0.500000f * BaseSize, 0.500000f * BaseSize, -0.500000f * BaseSize,
-                 0.500000f * BaseSize, 0.500000f * BaseSize, -0.500000f * BaseSize,
-                 -0.500000f * BaseSize, -0.500000f * BaseSize, -0.500000f * BaseSize,
-                 0.500000f * BaseSize, -0.500000f * BaseSize, -0.500000f * BaseSize
-            };
+                InitializeCubeVertices();
             }
 
             Matrix4 rotationMatrix = CreateRotationMatrix(Rotation);
@@ -144,27 +134,25 @@ namespace OpenTKBase
             GL.EnableClientState(ArrayCap.VertexArray);
 
             if (DrawMD == DrawMode.Fill || DrawMD == DrawMode.Both)
-            {
-                // Draw filled polygons
-                GL.Color4(1.0f, 1.0f, 1.0f, 1.0f);
-                GL.PolygonMode(MaterialFace.Front, PolygonMode.Fill);
-                GL.VertexPointer(3, VertexPointerType.Float, 0, cubeVertices);
-                GL.DrawElements(PrimitiveType.Triangles, cubeIndices.Length, DrawElementsType.UnsignedInt, cubeIndices);
-            }
+                fillCube((1, 1, 1, 1));
 
             if (DrawMD == DrawMode.Wireframe || DrawMD == DrawMode.Both)
+                drawWireframe();
+
+            if (DrawMD == DrawMode.Start)
             {
-                // Draw wireframe overlay
-                GL.Color4(0.0f, 0.0f, 0.0f, 1.0f);
-                GL.PolygonMode(MaterialFace.Front, PolygonMode.Line);
-                GL.VertexPointer(3, VertexPointerType.Float, 0, cubeVertices);
-                GL.DrawElements(PrimitiveType.Lines, lineIndices.Length, DrawElementsType.UnsignedInt, lineIndices);
+                fillCube((0.1f, 1, 0.1f, 0.75f));
+                drawWireframe();
+            }
+
+            if (DrawMD == DrawMode.End)
+            {
+                fillCube((1, 0.1f, 0.1f, 0.75f));
+                drawWireframe();
             }
 
             GL.DisableClientState(ArrayCap.VertexArray);
             GL.Disable(EnableCap.CullFace);
         }
-
     }
-
 }

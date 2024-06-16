@@ -7,7 +7,8 @@ namespace program
     {
         public static void Main()
         {
-            main app = new main(1280, 720, "OpenGL");
+            main app = new(1280, 720, "OpenGL");
+            Console.WriteLine("run");
 
             app.Initialize();
 
