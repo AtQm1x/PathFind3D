@@ -6,6 +6,8 @@ using OpenTK.Windowing.GraphicsLibraryFramework;
 using OpenTKBase;
 using PathFind3D;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using static OpenTKBase.GraphNode;
 
@@ -21,7 +23,7 @@ namespace program
         private float aspectRatio = 16f / 9;
         private float nodeDistance = 0.125f;
         private Random rng = new();
-        private static Vector3i gridSize = new(64);
+        private static Vector3i gridSize = new(32);
         private bool exit = false;
         private Matrix4 projectionMatrix;
         private Matrix4 viewMatrix;
@@ -29,7 +31,7 @@ namespace program
         private Vector3 cameraPosition = new Vector3(0, 0, 1);
         private GraphNode[,,] grid = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
         private Vector3 rot = new(0);
-        private double nodeDensity = 0.005;
+        private double nodeDensity = 0.25;
 
         //fps calculation stuff
         private double elapsedTime = 0.0;
@@ -71,7 +73,7 @@ namespace program
 
             // alpha blending
             GL.Enable(EnableCap.Blend);
-            GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+            GL.BlendFunc(BlendingFactor.One, BlendingFactor.OneMinusDstAlpha);
 
             SetupMatrices();
 
@@ -110,17 +112,30 @@ namespace program
         public void Shutdown()
         {
             exit = true;
+            continueSearch = false;
+        }
+
+        public void Run(Action mainLoopFunction)
+        {
+            runAction = mainLoopFunction;
+
+            window?.Run();
         }
 
         private void rebuildGrid()
         {
+            continueSearch = false;
             Thread thread = new Thread(() =>
             {
                 runRebuildGridThread(ref grid);
             });
 
             thread.Start();
+            continueSearch = true;
         }
+
+        Vector3i startPos = (0, 0, 0);
+        Vector3i endPos = (gridSize.X, gridSize.Y, gridSize.Z);
 
         private void runRebuildGridThread(ref GraphNode[,,] grid)
         {
@@ -141,7 +156,8 @@ namespace program
                         GraphNode nd = new(posX, posY, posZ)
                         {
                             Rotation = rot,
-                            AspectRatio = aspectRatio
+                            AspectRatio = aspectRatio,
+                            GridPosition = (i, j, k)
                         };
                         if (rng.NextDouble() >= nodeDensity)
                             nd.DrawMD = DrawMode.None;
@@ -149,10 +165,10 @@ namespace program
                         else
                             nd.DrawMD = DrawMode.Both;
 
-                        if (i == 0 && j == 0 && k == 0)
+                        if (i == startPos.X && j == startPos.Y && k == startPos.Z)
                             nd.DrawMD = DrawMode.Start;
 
-                        if (i == gridSize.X - 1 && j == gridSize.Y - 1 && k == gridSize.Z - 1)
+                        if (i == endPos.X - 1 && j == endPos.Y - 1 && k == endPos.Z - 1)
                             nd.DrawMD = DrawMode.End;
 
                         grid[i, j, k] = nd;
@@ -161,11 +177,140 @@ namespace program
             }
         }
 
-        public void Run(Action mainLoopFunction)
+        private void handleUserInput()
         {
-            runAction = mainLoopFunction;
+            if (window == null)
+                return;
+            if (window.KeyboardState.IsKeyDown(Keys.Escape))
+            {
+                Shutdown();
+                window.Close();
+            }
 
-            window?.Run();
+            if (window.KeyboardState.IsKeyPressed(Keys.R))
+            {
+                rebuildGrid();
+            }
+
+            if (window.KeyboardState.IsKeyPressed(Keys.F))
+            {
+                Thread thread = new Thread(() =>
+                {
+                    BreadthFirstSearch(grid[0, 0, 0]);
+                });
+
+                thread.Start();
+            }
+        }
+
+        Vector3i[] mainDirections =
+        {
+            (1, 0, 0),
+            (-1, 0, 0),
+            (0, 1, 0),
+            (0, -1, 0),
+            (0, 0, 1),
+            (0, 0, -1)
+        };
+
+        private void AddNeighborsToOpenSet(GraphNode currentNode)
+        {
+            Vector3i nodePos = currentNode.GridPosition;
+            foreach (var direction in mainDirections)
+            {
+                Vector3i newNodePos = nodePos + direction;
+
+                if (newNodePos.X < 0 || newNodePos.Y < 0 || newNodePos.Z < 0 ||
+                    newNodePos.X >= gridSize.X || newNodePos.Y >= gridSize.Y || newNodePos.Z >= gridSize.Z)
+                {
+                    continue;
+                }
+
+                GraphNode neighbor = grid[newNodePos.X, newNodePos.Y, newNodePos.Z];
+
+                if (closedSet.Contains(neighbor) || openSet.Contains(neighbor))
+                {
+                    continue;
+                }
+
+                if (neighbor.DrawMD == DrawMode.End)
+                {
+                    neighbor.Parent = currentNode;
+                    continueSearch = false;
+                    openSet.Clear();
+                    closedSet.Clear();
+                    Console.WriteLine("PathFound");
+                    BacktrackPath(neighbor);
+                    foreach (var item in grid)
+                    {
+                        if (item.DrawMD == DrawMode.Open)
+                        {
+                            item.DrawMD = DrawMode.None;
+                        }
+
+                        if (item.DrawMD == DrawMode.Both)
+                        {
+                            item.DrawMD = DrawMode.Glass;
+                        }
+                    }
+                    return;
+                }
+
+                if (neighbor.DrawMD == DrawMode.None)
+                {
+                    neighbor.Parent = currentNode;
+                    openSet.Add(neighbor);
+                }
+            }
+        }
+
+        bool continueSearch = true;
+        List<GraphNode> openSet = new();
+        List<GraphNode> closedSet = new();
+
+        private void BreadthFirstSearch(GraphNode startNode)
+        {
+            openSet.Clear();
+            closedSet.Clear();
+
+            openSet.Add(startNode);
+
+            while (openSet.Count > 0 && continueSearch)
+            {
+                GraphNode currentNode = openSet.First();
+                openSet.Remove(currentNode);
+                closedSet.Add(currentNode);
+
+                foreach (GraphNode node in openSet)
+                {
+                    if (node.DrawMD != DrawMode.Open)
+                    {
+                        node.DrawMD = DrawMode.Open;
+                    }
+                }
+
+                foreach (GraphNode node in closedSet)
+                {
+                    if (node.DrawMD != DrawMode.Closed && node.DrawMD != DrawMode.Start && node.DrawMD != DrawMode.End)
+                    {
+                        node.DrawMD = DrawMode.Closed;
+                    }
+                }
+
+                AddNeighborsToOpenSet(currentNode);
+            }
+        }
+
+        private void BacktrackPath(GraphNode endNode)
+        {
+            GraphNode currentNode = endNode;
+            while (currentNode.Parent != null)
+            {
+                currentNode = currentNode.Parent;
+                if (currentNode.DrawMD != DrawMode.Start)
+                    currentNode.DrawMD = DrawMode.Path;
+            }
+            Console.WriteLine("Path has been traced back.");
         }
         private void onUpdateFrame(FrameEventArgs e)
         {
@@ -174,7 +319,7 @@ namespace program
 
             foreach (GraphNode node in grid)
             {
-                if (node != null && node.DrawMD != DrawMode.None)
+                if (node != null && (node.DrawMD != DrawMode.None || node.DrawMD == DrawMode.Closed))
                 {
                     if (node.Rotation != rot)
                         node.Rotation = rot;
@@ -186,7 +331,6 @@ namespace program
 
             elapsedTime += e.Time;
             frameCount++;
-
             if (elapsedTime >= 1.0)
             {
                 double fps = frameCount / elapsedTime;
@@ -195,17 +339,7 @@ namespace program
                 frameCount = 0;
             }
 
-
-            if (window.KeyboardState.IsKeyDown(Keys.Escape))
-            {
-                exit = true;
-                window.Close();
-            }
-
-            if (window.KeyboardState.IsKeyPressed(Keys.R))
-            {
-                rebuildGrid();
-            }
+            handleUserInput();
 
             runAction?.Invoke();
         }

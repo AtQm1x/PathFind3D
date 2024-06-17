@@ -4,10 +4,11 @@ using System.Collections.Generic;
 
 namespace OpenTKBase
 {
-    public enum DrawMode { Fill, Wireframe, Both, None, Start, End }
+    public enum DrawMode { Fill, Wireframe, Both, None, Start, End, Open, Closed, Path, Glass }
     public class GraphNode
     {
-        public Vector3 Position { get; private set; }
+        public Vector3 Position { get; set; }
+        public Vector3i GridPosition { get; set; }
         public GraphNode? Parent { get; set; } = null;
         public List<GraphNode> Connections { get; set; } = new();
         public float AspectRatio { get; set; } = 1;
@@ -112,7 +113,7 @@ namespace OpenTKBase
 
         public void Draw(Matrix4 viewMatrix, Matrix4 projectionMatrix)
         {
-            if (DrawMD == DrawMode.None)
+            if (DrawMD == DrawMode.None || DrawMD == DrawMode.Closed)
                 return;
 
             if (cubeVertices[0] != -0.500000f * BaseSize)
@@ -133,22 +134,43 @@ namespace OpenTKBase
 
             GL.EnableClientState(ArrayCap.VertexArray);
 
-            if (DrawMD == DrawMode.Fill || DrawMD == DrawMode.Both)
-                fillCube((1, 1, 1, 1));
-
-            if (DrawMD == DrawMode.Wireframe || DrawMD == DrawMode.Both)
-                drawWireframe();
-
-            if (DrawMD == DrawMode.Start)
+            switch (DrawMD)
             {
-                fillCube((0.1f, 1, 0.1f, 0.75f));
-                drawWireframe();
-            }
+                case DrawMode.Fill:
+                    fillCube((1, 1, 1, 1));
+                    break;
 
-            if (DrawMD == DrawMode.End)
-            {
-                fillCube((1, 0.1f, 0.1f, 0.75f));
-                drawWireframe();
+                case DrawMode.Wireframe:
+                    drawWireframe();
+                    break;
+
+                case DrawMode.Both:
+                    fillCube((1, 1, 1, 1));
+                    drawWireframe();
+                    break;
+
+                case DrawMode.Start:
+                    fillCube((0, 1, 0, 1f));
+                    drawWireframe();
+                    break;
+
+                case DrawMode.End:
+                    fillCube((1, 0, 0, 1f));
+                    drawWireframe();
+                    break;
+
+                case DrawMode.Open:
+                    fillCube((1, 0.8470588235f, 0, 0.2f));
+                    drawWireframe();
+                    break;
+
+                case DrawMode.Path:
+                    fillCube((0, 1, 1, 0.1f));
+                    break;
+
+                case DrawMode.Glass:
+                    fillCube((0.1f, 0.1f, 0.1f, 0.01f));
+                    break;
             }
 
             GL.DisableClientState(ArrayCap.VertexArray);
