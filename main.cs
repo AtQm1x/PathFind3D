@@ -9,7 +9,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
-using static OpenTKBase.GraphNode;
 
 namespace program
 {
@@ -134,8 +133,8 @@ namespace program
             continueSearch = true;
         }
 
-        Vector3i startPos = (0, 0, 0);
-        Vector3i endPos = (gridSize.X, gridSize.Y, gridSize.Z);
+        Vector3i startnodePos = (0, 0, 0);
+        Vector3i endNodePos = (gridSize.X, gridSize.Y, gridSize.Z);
 
         private void runRebuildGridThread(ref GraphNode[,,] grid)
         {
@@ -165,22 +164,26 @@ namespace program
                         else
                             nd.DrawMD = DrawMode.Both;
 
-                        if (i == startPos.X && j == startPos.Y && k == startPos.Z)
+                        if (i == startnodePos.X && j == startnodePos.Y && k == startnodePos.Z)
                             nd.DrawMD = DrawMode.Start;
 
-                        if (i == endPos.X - 1 && j == endPos.Y - 1 && k == endPos.Z - 1)
+                        if (i == endNodePos.X - 1 && j == endNodePos.Y - 1 && k == endNodePos.Z - 1)
                             nd.DrawMD = DrawMode.End;
+
+                        nd.calcDistanceToEnd(endNodePos);
 
                         grid[i, j, k] = nd;
                     }
                 }
             }
         }
-
+        Thread BFSThread;
+        Thread AStarThread;
         private void handleUserInput()
         {
             if (window == null)
                 return;
+
             if (window.KeyboardState.IsKeyDown(Keys.Escape))
             {
                 Shutdown();
@@ -194,12 +197,48 @@ namespace program
 
             if (window.KeyboardState.IsKeyPressed(Keys.F))
             {
-                Thread thread = new Thread(() =>
+                grid[startnodePos.X, startnodePos.Y, startnodePos.Z].DrawMD = DrawMode.Start;
+                grid[endNodePos.X - 1, endNodePos.Y - 1, endNodePos.Z - 1].DrawMD = DrawMode.End;
+                BFSThread = new Thread(() =>
                 {
-                    BreadthFirstSearch(grid[0, 0, 0]);
+                    BreadthFirstSearch(grid[startnodePos.X, startnodePos.Y, startnodePos.Z]);
                 });
 
-                thread.Start();
+                BFSThread.Start();
+            }
+
+            if (window.KeyboardState.IsKeyPressed(Keys.G))
+            {
+                grid[startnodePos.X, startnodePos.Y, startnodePos.Z].DrawMD = DrawMode.Start;
+                grid[endNodePos.X - 1, endNodePos.Y - 1, endNodePos.Z - 1].DrawMD = DrawMode.End;
+                AStarThread = new Thread(() =>
+                {
+                    AStar(grid[startnodePos.X, startnodePos.Y, startnodePos.Z]);
+                });
+
+                AStarThread.Start();
+            }
+
+            if (window.KeyboardState.IsKeyPressed(Keys.Q))
+            {
+                continueSearch = false;
+
+                AStarThread?.Join();
+                BFSThread?.Join();
+                openSetSorted.Clear();
+                openSet.Clear();
+                closedSet.Clear();
+
+                foreach (GraphNode node in grid)
+                {
+                    if (node.DrawMD == DrawMode.Closed || node.DrawMD == DrawMode.Open || node.DrawMD == DrawMode.Path)
+                        node.DrawMD = DrawMode.None;
+
+                    if (node.DrawMD == DrawMode.Glass)
+                        node.DrawMD = DrawMode.Both;
+                }
+
+                continueSearch = true;
             }
         }
 
@@ -247,10 +286,52 @@ namespace program
                         {
                             item.DrawMD = DrawMode.None;
                         }
+                    }
+                    return;
+                }
 
-                        if (item.DrawMD == DrawMode.Both)
+                if (neighbor.DrawMD == DrawMode.None)
+                {
+                    neighbor.Parent = currentNode;
+                    neighbor.dstFromStart = currentNode.dstFromStart + 1;
+                    openSet.Add(neighbor);
+                }
+            }
+        }
+
+        private void AddNeighborsToSortedOpenSet(GraphNode currentNode)
+        {
+            Vector3i nodePos = currentNode.GridPosition;
+            foreach (var direction in mainDirections)
+            {
+                Vector3i newNodePos = nodePos + direction;
+
+                if (newNodePos.X < 0 || newNodePos.Y < 0 || newNodePos.Z < 0 ||
+                    newNodePos.X >= gridSize.X || newNodePos.Y >= gridSize.Y || newNodePos.Z >= gridSize.Z)
+                {
+                    continue;
+                }
+
+                GraphNode neighbor = grid[newNodePos.X, newNodePos.Y, newNodePos.Z];
+
+                if (closedSet.Contains(neighbor) || openSetSorted.Contains(neighbor))
+                {
+                    continue;
+                }
+
+                if (neighbor.DrawMD == DrawMode.End)
+                {
+                    neighbor.Parent = currentNode;
+                    continueSearch = false;
+                    openSetSorted.Clear();
+                    closedSet.Clear();
+                    Console.WriteLine("PathFound");
+                    BacktrackPath(neighbor);
+                    foreach (var item in grid)
+                    {
+                        if (item.DrawMD == DrawMode.Open)
                         {
-                            item.DrawMD = DrawMode.Glass;
+                            item.DrawMD = DrawMode.None;
                         }
                     }
                     return;
@@ -259,25 +340,28 @@ namespace program
                 if (neighbor.DrawMD == DrawMode.None)
                 {
                     neighbor.Parent = currentNode;
-                    openSet.Add(neighbor);
+                    neighbor.dstFromStart = currentNode.dstFromStart + 1;
+                    openSetSorted.Add(neighbor);
                 }
             }
         }
 
         bool continueSearch = true;
         List<GraphNode> openSet = new();
+        SortedSet<GraphNode> openSetSorted = new(Comparer<GraphNode>.Create((x, y) => (x.dstToEnd).CompareTo(y.dstToEnd)));
         List<GraphNode> closedSet = new();
 
         private void BreadthFirstSearch(GraphNode startNode)
         {
-            openSet.Clear();
+            openSetSorted.Clear();
             closedSet.Clear();
 
             openSet.Add(startNode);
 
             while (openSet.Count > 0 && continueSearch)
             {
-                GraphNode currentNode = openSet.First();
+                GraphNode currentNode = openSet[0];
+
                 openSet.Remove(currentNode);
                 closedSet.Add(currentNode);
 
@@ -301,16 +385,55 @@ namespace program
             }
         }
 
+        public void AStar(GraphNode startNode) // idk if this is a true A* 
+        {
+            openSetSorted = new(Comparer<GraphNode>.Create((x, y) => (x.dstToEnd).CompareTo(y.dstToEnd)));
+            openSetSorted.Clear();
+            closedSet.Clear();
+
+            openSetSorted.Add(startNode);
+
+            while (openSetSorted.Count > 0 && continueSearch)
+            {
+                //openSetSorted.Sort((node1, node2) => (node1.dstToEnd).CompareTo(node2.dstToEnd));
+
+                GraphNode currentNode = openSetSorted.First();
+                openSetSorted.Remove(currentNode);
+                closedSet.Add(currentNode);
+
+                foreach (GraphNode node in openSetSorted)
+                {
+                    if (node.DrawMD != DrawMode.Open)
+                    {
+                        node.DrawMD = DrawMode.Open;
+                    }
+                }
+
+                foreach (GraphNode node in closedSet)
+                {
+                    if (node.DrawMD != DrawMode.Closed && node.DrawMD != DrawMode.Start && node.DrawMD != DrawMode.End)
+                    {
+                        node.DrawMD = DrawMode.Closed;
+                    }
+                }
+
+                AddNeighborsToSortedOpenSet(currentNode);
+            }
+        }
         private void BacktrackPath(GraphNode endNode)
         {
+            int PathLen = 0;
             GraphNode currentNode = endNode;
             while (currentNode.Parent != null)
             {
                 currentNode = currentNode.Parent;
                 if (currentNode.DrawMD != DrawMode.Start)
+                {
                     currentNode.DrawMD = DrawMode.Path;
+                    PathLen++;
+                }
             }
-            Console.WriteLine("Path has been traced back.");
+            Console.WriteLine($"Path length: {PathLen}");
         }
         private void onUpdateFrame(FrameEventArgs e)
         {
@@ -334,7 +457,7 @@ namespace program
             if (elapsedTime >= 1.0)
             {
                 double fps = frameCount / elapsedTime;
-                window.Title = $"{title} - FPS: {fps:F2}";
+                window.Title = $"{title} - FPS: {fps:F2} - Grid Dimensions: {gridSize}";
                 elapsedTime = 0.0;
                 frameCount = 0;
             }

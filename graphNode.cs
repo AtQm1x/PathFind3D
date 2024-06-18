@@ -1,5 +1,6 @@
 ﻿using OpenTK.Graphics.OpenGL;
 using OpenTK.Mathematics;
+using System;
 using System.Collections.Generic;
 
 namespace OpenTKBase
@@ -15,6 +16,8 @@ namespace OpenTKBase
         public Vector3 Rotation { get; set; } = new(0, 0, 0);
         public float BaseSize = 0.125f;
         public DrawMode DrawMD { get; set; } = DrawMode.Both;
+        public float dstToEnd = 0;
+        public float dstFromStart = 0;
 
 
         int[] cubeIndices =
@@ -70,6 +73,16 @@ namespace OpenTKBase
             InitializeCubeVertices();
         }
 
+        public void calcDistanceToEnd(Vector3i endPosition)
+        {
+            dstToEnd = MathF.Sqrt(MathF.Pow(endPosition.X - Position.X, 2) + MathF.Pow(endPosition.Y - Position.Y, 2) + MathF.Pow(endPosition.Y - Position.Y, 2));
+        }
+
+        public float DistanceTo(GraphNode other)
+        {
+            return (other.Position - Position).Length;
+        }
+
         private void InitializeCubeVertices()
         {
             cubeVertices = new float[]
@@ -113,7 +126,7 @@ namespace OpenTKBase
 
         public void Draw(Matrix4 viewMatrix, Matrix4 projectionMatrix)
         {
-            if (DrawMD == DrawMode.None || DrawMD == DrawMode.Closed)
+            if (DrawMD == DrawMode.None)
                 return;
 
             if (cubeVertices[0] != -0.500000f * BaseSize)
@@ -170,6 +183,10 @@ namespace OpenTKBase
 
                 case DrawMode.Glass:
                     fillCube((0.1f, 0.1f, 0.1f, 0.01f));
+                    break;
+
+                case DrawMode.Closed:
+                    //fillCube((1f, 1f, 0.1f, 0.2f));
                     break;
             }
 
