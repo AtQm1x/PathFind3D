@@ -5,19 +5,22 @@ using System.Collections.Generic;
 
 namespace OpenTKBase
 {
-    public enum DrawMode { Fill, Wireframe, Both, None, Start, End, Open, Closed, Path, Glass }
+    public enum DrawMode { Wireframe, Wall, Air, Start, End, Open, Closed, Path }
     public class GraphNode
     {
         public Vector3 Position { get; set; }
         public Vector3i GridPosition { get; set; }
         public GraphNode? Parent { get; set; } = null;
-        public List<GraphNode> Connections { get; set; } = new();
+        //public List<GraphNode> Connections { get; set; } = new();
         public float AspectRatio { get; set; } = 1;
         public Vector3 Rotation { get; set; } = new(0, 0, 0);
         public float BaseSize = 0.125f;
-        public DrawMode DrawMD { get; set; } = DrawMode.Both;
+        public DrawMode DrawMD { get; set; } = DrawMode.Wall;
+
         public float dstToEnd = 0;
         public float dstFromStart = 0;
+
+        private static readonly Vector4 ColorWhite = new Vector4(1, 1, 1, 1);
 
 
         int[] cubeIndices =
@@ -73,11 +76,6 @@ namespace OpenTKBase
             InitializeCubeVertices();
         }
 
-        public void calcDistanceToEnd(Vector3i endPosition)
-        {
-            dstToEnd = MathF.Sqrt(MathF.Pow(endPosition.X - Position.X, 2) + MathF.Pow(endPosition.Y - Position.Y, 2) + MathF.Pow(endPosition.Y - Position.Y, 2));
-        }
-
         public float DistanceTo(GraphNode other)
         {
             return (other.Position - Position).Length;
@@ -126,9 +124,10 @@ namespace OpenTKBase
 
         public void Draw(Matrix4 viewMatrix, Matrix4 projectionMatrix)
         {
-            if (DrawMD == DrawMode.None)
+            if (DrawMD == DrawMode.Air)
                 return;
 
+            // Ensure cube vertices are initialized once
             if (cubeVertices[0] != -0.500000f * BaseSize)
             {
                 InitializeCubeVertices();
@@ -149,44 +148,38 @@ namespace OpenTKBase
 
             switch (DrawMD)
             {
-                case DrawMode.Fill:
-                    fillCube((1, 1, 1, 1));
-                    break;
 
                 case DrawMode.Wireframe:
                     drawWireframe();
                     break;
 
-                case DrawMode.Both:
-                    fillCube((1, 1, 1, 1));
+                case DrawMode.Wall:
+                    fillCube(ColorWhite);
                     drawWireframe();
                     break;
 
                 case DrawMode.Start:
-                    fillCube((0, 1, 0, 1f));
+                    fillCube((0, 1, 0, 1));
                     drawWireframe();
                     break;
 
                 case DrawMode.End:
-                    fillCube((1, 0, 0, 1f));
+                    fillCube((1, 0, 0, 1));
                     drawWireframe();
                     break;
 
                 case DrawMode.Open:
-                    fillCube((1, 0.8470588235f, 0, 0.2f));
+                    fillCube((1, 0.8470588235f, 0, 0.1f));
                     drawWireframe();
                     break;
 
                 case DrawMode.Path:
                     fillCube((0, 1, 1, 0.1f));
-                    break;
-
-                case DrawMode.Glass:
-                    fillCube((0.1f, 0.1f, 0.1f, 0.01f));
+                    drawWireframe();
                     break;
 
                 case DrawMode.Closed:
-                    //fillCube((1f, 1f, 0.1f, 0.2f));
+                    // fillCube(new Vector4(1f, 1f, 0.1f, 0.2f));
                     break;
             }
 

@@ -7,6 +7,7 @@ using OpenTKBase;
 using PathFind3D;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 
@@ -26,11 +27,19 @@ namespace program
         private bool exit = false;
         private Matrix4 projectionMatrix;
         private Matrix4 viewMatrix;
-        private float zoom = 1.0f;
-        private Vector3 cameraPosition = new Vector3(0, 0, 1);
+        private static float zoom = gridSize.X / 4;
+        private Vector3 cameraPosition = new Vector3(0, 0, zoom);
         private GraphNode[,,] grid = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
         private Vector3 rot = new(0);
-        private double nodeDensity = 0.25;
+
+        private double nodeDensity = 0.100;
+
+        bool continueSearch = true;
+        List<GraphNode> openSet = new();
+        SortedSet<GraphNode> openSetSorted = new();
+        List<GraphNode> closedSet = new();
+        private GraphNode boxNode;
+        private float baseSize;
 
         //fps calculation stuff
         private double elapsedTime = 0.0;
@@ -77,6 +86,16 @@ namespace program
             SetupMatrices();
 
             rebuildGrid();
+
+            // Precompute base size once if gridSize does not change.
+            baseSize = MtH.cubeRootF(gridSize.X * gridSize.Y * gridSize.Z) * 0.125f + 0.01f;
+
+            // Initialize boxNode once
+            boxNode = new GraphNode(0.125f / 2, 0.125f / 2, 0.125f / 2)
+            {
+                BaseSize = baseSize,
+                DrawMD = DrawMode.Wireframe
+            };
             return true;
         }
 
@@ -158,11 +177,12 @@ namespace program
                             AspectRatio = aspectRatio,
                             GridPosition = (i, j, k)
                         };
+
                         if (rng.NextDouble() >= nodeDensity)
-                            nd.DrawMD = DrawMode.None;
+                            nd.DrawMD = DrawMode.Air;
 
                         else
-                            nd.DrawMD = DrawMode.Both;
+                            nd.DrawMD = DrawMode.Wall;
 
                         if (i == startnodePos.X && j == startnodePos.Y && k == startnodePos.Z)
                             nd.DrawMD = DrawMode.Start;
@@ -170,13 +190,14 @@ namespace program
                         if (i == endNodePos.X - 1 && j == endNodePos.Y - 1 && k == endNodePos.Z - 1)
                             nd.DrawMD = DrawMode.End;
 
-                        nd.calcDistanceToEnd(endNodePos);
+                        nd.dstToEnd = (nd.GridPosition - endNodePos).EuclideanLength;
 
                         grid[i, j, k] = nd;
                     }
                 }
             }
         }
+
         Thread BFSThread;
         Thread AStarThread;
         private void handleUserInput()
@@ -232,13 +253,15 @@ namespace program
                 foreach (GraphNode node in grid)
                 {
                     if (node.DrawMD == DrawMode.Closed || node.DrawMD == DrawMode.Open || node.DrawMD == DrawMode.Path)
-                        node.DrawMD = DrawMode.None;
-
-                    if (node.DrawMD == DrawMode.Glass)
-                        node.DrawMD = DrawMode.Both;
+                        node.DrawMD = DrawMode.Air;
                 }
 
                 continueSearch = true;
+            }
+
+            if (window.KeyboardState.IsKeyPressed(Keys.H))
+            {
+                drawWalls = !drawWalls;
             }
         }
 
@@ -272,10 +295,16 @@ namespace program
                     continue;
                 }
 
+                if (neighbor.dstFromStart >= currentNode.dstFromStart + 1 || neighbor.dstFromStart == 0)
+                {
+                    neighbor.Parent = currentNode;
+                    neighbor.dstFromStart = currentNode.dstFromStart + 1;
+                }
+
                 if (neighbor.DrawMD == DrawMode.End)
                 {
                     neighbor.Parent = currentNode;
-                    continueSearch = false;
+                    //continueSearch = false;
                     openSet.Clear();
                     closedSet.Clear();
                     Console.WriteLine("PathFound");
@@ -284,18 +313,17 @@ namespace program
                     {
                         if (item.DrawMD == DrawMode.Open)
                         {
-                            item.DrawMD = DrawMode.None;
+                            item.DrawMD = DrawMode.Air;
                         }
                     }
                     return;
                 }
 
-                if (neighbor.DrawMD == DrawMode.None)
+                if (neighbor.DrawMD == DrawMode.Air)
                 {
-                    neighbor.Parent = currentNode;
-                    neighbor.dstFromStart = currentNode.dstFromStart + 1;
                     openSet.Add(neighbor);
                 }
+
             }
         }
 
@@ -314,6 +342,13 @@ namespace program
 
                 GraphNode neighbor = grid[newNodePos.X, newNodePos.Y, newNodePos.Z];
 
+
+                if (neighbor.dstFromStart >= currentNode.dstFromStart + 1 || neighbor.dstFromStart == 0)
+                {
+                    neighbor.Parent = currentNode;
+                    neighbor.dstFromStart = currentNode.dstFromStart + 1;
+                }
+
                 if (closedSet.Contains(neighbor) || openSetSorted.Contains(neighbor))
                 {
                     continue;
@@ -322,7 +357,7 @@ namespace program
                 if (neighbor.DrawMD == DrawMode.End)
                 {
                     neighbor.Parent = currentNode;
-                    continueSearch = false;
+                    //continueSearch = false;
                     openSetSorted.Clear();
                     closedSet.Clear();
                     Console.WriteLine("PathFound");
@@ -331,29 +366,26 @@ namespace program
                     {
                         if (item.DrawMD == DrawMode.Open)
                         {
-                            item.DrawMD = DrawMode.None;
+                            item.DrawMD = DrawMode.Air;
                         }
                     }
                     return;
                 }
 
-                if (neighbor.DrawMD == DrawMode.None)
+                if (neighbor.DrawMD == DrawMode.Air)
                 {
-                    neighbor.Parent = currentNode;
-                    neighbor.dstFromStart = currentNode.dstFromStart + 1;
                     openSetSorted.Add(neighbor);
                 }
+
             }
         }
 
-        bool continueSearch = true;
-        List<GraphNode> openSet = new();
-        SortedSet<GraphNode> openSetSorted = new(Comparer<GraphNode>.Create((x, y) => (x.dstToEnd).CompareTo(y.dstToEnd)));
-        List<GraphNode> closedSet = new();
-
         private void BreadthFirstSearch(GraphNode startNode)
         {
-            openSetSorted.Clear();
+            Stopwatch stopwatch = new Stopwatch();
+            stopwatch.Start();
+
+            openSet.Clear();
             closedSet.Clear();
 
             openSet.Add(startNode);
@@ -383,11 +415,18 @@ namespace program
 
                 AddNeighborsToOpenSet(currentNode);
             }
+
+            stopwatch.Stop();
+            TimeSpan elapsedTime = stopwatch.Elapsed;
+            Console.WriteLine($"BreadthFirstSearch execution time: {elapsedTime.TotalMilliseconds} ms");
         }
 
-        public void AStar(GraphNode startNode) // idk if this is a true A* 
+        public void AStar(GraphNode startNode)
         {
-            openSetSorted = new(Comparer<GraphNode>.Create((x, y) => (x.dstToEnd).CompareTo(y.dstToEnd)));
+            Stopwatch stopwatch = new Stopwatch();
+            stopwatch.Start();
+
+            openSetSorted = new(Comparer<GraphNode>.Create((x, y) => (x.dstToEnd + x.dstFromStart).CompareTo(y.dstToEnd + y.dstFromStart)));
             openSetSorted.Clear();
             closedSet.Clear();
 
@@ -395,8 +434,6 @@ namespace program
 
             while (openSetSorted.Count > 0 && continueSearch)
             {
-                //openSetSorted.Sort((node1, node2) => (node1.dstToEnd).CompareTo(node2.dstToEnd));
-
                 GraphNode currentNode = openSetSorted.First();
                 openSetSorted.Remove(currentNode);
                 closedSet.Add(currentNode);
@@ -419,7 +456,12 @@ namespace program
 
                 AddNeighborsToSortedOpenSet(currentNode);
             }
+
+            stopwatch.Stop();
+            TimeSpan elapsedTime = stopwatch.Elapsed;
+            Console.WriteLine($"A* execution time: {elapsedTime.TotalMilliseconds} ms");
         }
+
         private void BacktrackPath(GraphNode endNode)
         {
             int PathLen = 0;
@@ -433,16 +475,15 @@ namespace program
                     PathLen++;
                 }
             }
-            Console.WriteLine($"Path length: {PathLen}");
+            Console.WriteLine($"Path length: {endNode.dstFromStart - 1}");
+            updateGrid();
         }
-        private void onUpdateFrame(FrameEventArgs e)
-        {
-            if (window == null)
-                return;
 
+        private void updateGrid()
+        {
             foreach (GraphNode node in grid)
             {
-                if (node != null && (node.DrawMD != DrawMode.None || node.DrawMD == DrawMode.Closed))
+                if (node != null && node.DrawMD != DrawMode.Air)
                 {
                     if (node.Rotation != rot)
                         node.Rotation = rot;
@@ -451,8 +492,31 @@ namespace program
                         node.AspectRatio = aspectRatio;
                 }
             }
+        }
 
-            elapsedTime += e.Time;
+        private void onUpdateFrame(FrameEventArgs e)
+        {
+            if (window == null)
+                return;
+
+            updateGrid();
+
+            if (boxNode.Rotation != rot || boxNode.AspectRatio != aspectRatio)
+            {
+                boxNode.Rotation = rot;
+                boxNode.AspectRatio = aspectRatio;
+            }
+
+            calculateFPS(e.Time);
+            handleUserInput();
+
+            runAction?.Invoke();
+        }
+
+        private void calculateFPS(double time)
+        {
+            if (window == null) return;
+            elapsedTime += time;
             frameCount++;
             if (elapsedTime >= 1.0)
             {
@@ -461,10 +525,6 @@ namespace program
                 elapsedTime = 0.0;
                 frameCount = 0;
             }
-
-            handleUserInput();
-
-            runAction?.Invoke();
         }
 
         private void onRenderFrame(FrameEventArgs args)
@@ -476,27 +536,26 @@ namespace program
 
             drawGrid();
 
-            GraphNode boxNode = new(0.125f / 2, 0.125f / 2, 0.125f / 2)
-            {
-                BaseSize = MtH.cubeRootF(gridSize.X * gridSize.Y * gridSize.Z) * 0.125f + 0.01f,
-                Rotation = rot,
-                AspectRatio = aspectRatio,
-                DrawMD = DrawMode.Wireframe
-            };
             boxNode.Draw(viewMatrix, projectionMatrix);
 
-            window?.SwapBuffers();
+            window.SwapBuffers();
         }
 
+        private bool drawWalls = true;
         private void drawGrid()
         {
-            foreach (GraphNode node in grid)
+            foreach (GraphNode? node in grid)
             {
-                if (node == null) continue;
-                if (node.DrawMD == DrawMode.None) continue;
-                node.Draw(viewMatrix, projectionMatrix);
+                if (node?.DrawMD != DrawMode.Air)
+
+                    if (node?.DrawMD == DrawMode.Wall && drawWalls)
+                        node?.Draw(viewMatrix, projectionMatrix);
+
+                    else if (node?.DrawMD != DrawMode.Wall)
+                        node?.Draw(viewMatrix, projectionMatrix);
             }
         }
+
 
         private void onMouseWheel(MouseWheelEventArgs e)
         {
@@ -504,6 +563,7 @@ namespace program
             zoom = Math.Max(0.1f, Math.Min(zoom, 1000.0f));
             cameraPosition.Z = zoom;
             UpdateViewMatrix();
+
         }
 
         private void onMouseMove(MouseMoveEventArgs e)
@@ -517,6 +577,7 @@ namespace program
                 rot.X += (window.MouseState.Delta.Y / 100f);
 
                 rot.X = Math.Max(-1.5f, Math.Min(1.5f, rot.X));
+
             }
 
             if (window.MouseState.IsButtonDown(MouseButton.Middle))
@@ -525,6 +586,7 @@ namespace program
                 cameraPosition.Y += window.MouseState.Delta.Y / 300f;
 
                 UpdateViewMatrix();
+
             }
         }
     }
