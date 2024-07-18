@@ -3,9 +3,8 @@ using OpenTK.Mathematics;
 using System;
 using System.Collections.Generic;
 
-namespace OpenTKBase
+namespace PathFind3D
 {
-    public enum DrawMode { Wireframe, Wall, Air, Start, End, Open, Closed, Path }
     public class GraphNode
     {
         public Vector3 Position { get; set; }
