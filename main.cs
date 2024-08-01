@@ -9,7 +9,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
-
+using System.Threading.Tasks;
 using NVector2 = System.Numerics.Vector2;
 using NVector3 = System.Numerics.Vector3;
 using NVector4 = System.Numerics.Vector4;
@@ -37,7 +37,7 @@ namespace PathFind3D
         private float aspectRatio = 16f / 9;
         private float nodeDistance = 0.125f;
         private Random rng = new(DateTime.Now.Millisecond * DateTime.Now.Second);
-        private static Vector3i gridSize = new(32);
+        private static Vector3i gridSize = new(32, 16, 32);
         private bool exit = false;
         private Matrix4 projectionMatrix;
         private Matrix4 viewMatrix;
@@ -46,14 +46,14 @@ namespace PathFind3D
         private GraphNode[,,] grid = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
         private Vector3 rot = new(0);
 
-        private double nodeDensity = 0;
+        private double nodeDensity = 0.1;
 
         private bool continueSearch = true;
         private List<GraphNode> openSet = new();
         private SortedSet<GraphNode> openSetSorted = new();
         private List<GraphNode> closedSet = new();
         private GraphNode? boxNode;
-        private float baseSize;
+        private Vector3 baseSize;
         private bool drawWalls = true;
         private Vector3i startnodePos = (0, 0, 0);
         private Vector3i endNodePos = (gridSize.X, gridSize.Y, gridSize.Z);
@@ -103,16 +103,6 @@ namespace PathFind3D
 
         #region grid and config
 
-        private void reloadConfig()
-        {
-            GridConfig gconf = new();
-            gconf.ReadConfigFromFile("gridSettings.txt");
-            gridSize = gconf.GridSize;
-            nodeDensity = gconf.NodeDensity;
-            startnodePos = MtH.Clamp(gconf.StartNodePos, (0, 0, 0), gridSize);
-            endNodePos = MtH.Clamp(gconf.EndNodePos, (0, 0, 0), gridSize);
-        }
-
         private void rebuildGrid()
         {
             continueSearch = false;
@@ -127,20 +117,28 @@ namespace PathFind3D
 
         private void runRebuildGridThread(ref GraphNode[,,] grid)
         {
-            if (grid.GetUpperBound(0) != gridSize.X || grid.GetUpperBound(1) != gridSize.Y || grid.GetUpperBound(2) != gridSize.Z)
+            boxNode = new GraphNode(Vector3i.Zero)
+            {
+                BaseSize = gridSize * new Vector3(0.125f) + new Vector3(0.01f),
+                DrawMD = DrawMode.Wireframe
+            };
+
+            if (grid.LongLength != gridSize.X * gridSize.Y * gridSize.Z)
                 grid = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
 
-            float startOffset = ((int)MtH.cubeRoot(gridSize.X * gridSize.Y * gridSize.Z) - 1) * nodeDistance / 2;
+            Vector3 startOffset = (gridSize - Vector3.One) * new Vector3(nodeDistance / 2);
 
-            for (int i = 0; i < gridSize.X; i++)
+            GraphNode[,,] gridBuffer = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
+
+            Parallel.For(0, gridSize.X, i =>
             {
-                for (int j = 0; j < gridSize.Y; j++)
+                Parallel.For(0, gridSize.Y, j =>
                 {
-                    for (int k = 0; k < gridSize.Z; k++)
+                    Parallel.For(0, gridSize.Z, k =>
                     {
-                        float posX = i * nodeDistance - startOffset;
-                        float posY = j * nodeDistance - startOffset;
-                        float posZ = k * nodeDistance - startOffset;
+                        float posX = i * nodeDistance - startOffset.X;
+                        float posY = j * nodeDistance - startOffset.Y;
+                        float posZ = k * nodeDistance - startOffset.Z;
                         GraphNode nd = new(posX, posY, posZ)
                         {
                             Rotation = rot,
@@ -150,7 +148,6 @@ namespace PathFind3D
 
                         if (rng.NextDouble() >= nodeDensity)
                             nd.DrawMD = DrawMode.Air;
-
                         else
                             nd.DrawMD = DrawMode.Wall;
 
@@ -160,25 +157,40 @@ namespace PathFind3D
                         if (i == endNodePos.X - 1 && j == endNodePos.Y - 1 && k == endNodePos.Z - 1)
                             nd.DrawMD = DrawMode.End;
 
-                        nd.dstToEnd = (nd.GridPosition - endNodePos).EuclideanLength;
+                        gridBuffer[i, j, k] = nd;
+                    });
+                });
+            });
 
-                        grid[i, j, k] = nd;
-                    }
-                }
-            }
+            grid = gridBuffer;
         }
 
         private void drawGrid()
         {
-            foreach (GraphNode? node in grid)
+
+            // Sort transparent objects back-to-front
+            var sortedGrid = grid.Cast<GraphNode>()
+                .Where(node => node?.DrawMD != DrawMode.Air && node?.DrawMD != DrawMode.Wall && node != null)
+                .OrderByDescending(node => Vector3.Distance(cameraPosition, new Vector3(node.Position.X, node.Position.X, node.Position.X)))
+                .ToList();
+
+            // Draw opaque objects first
+            foreach (var node in grid)
             {
-                if (node?.DrawMD != DrawMode.Air)
+                if (node != null)
+                {
+                    if (node.DrawMD == DrawMode.Wall && drawWalls)
+                        node.Draw(viewMatrix, projectionMatrix);
+                }
+            }
 
-                    if (node?.DrawMD == DrawMode.Wall && drawWalls)
-                        node?.Draw(viewMatrix, projectionMatrix);
-
-                    else if (node?.DrawMD != DrawMode.Wall)
-                        node?.Draw(viewMatrix, projectionMatrix);
+            // Then draw sorted transparent objects
+            foreach (var node in sortedGrid)
+            {
+                if (node != null)
+                {
+                    node?.Draw(viewMatrix, projectionMatrix);
+                }
             }
         }
 
@@ -200,6 +212,19 @@ namespace PathFind3D
         #endregion
 
         #region pathfinding
+
+        Vector3i[] directions = new Vector3i[]
+        {
+            new Vector3i(1, 1, 1), new Vector3i(1, 1, 0), new Vector3i(1, 1, -1),
+            new Vector3i(1, 0, 1), new Vector3i(1, 0, 0), new Vector3i(1, 0, -1),
+            new Vector3i(1, -1, 1), new Vector3i(1, -1, 0), new Vector3i(1, -1, -1),
+            new Vector3i(0, 1, 1), new Vector3i(0, 1, 0), new Vector3i(0, 1, -1),
+            new Vector3i(0, 0, 1), new Vector3i(0, 0, -1),
+            new Vector3i(0, -1, 1), new Vector3i(0, -1, 0), new Vector3i(0, -1, -1),
+            new Vector3i(-1, 1, 1), new Vector3i(-1, 1, 0), new Vector3i(-1, 1, -1),
+            new Vector3i(-1, 0, 1), new Vector3i(-1, 0, 0), new Vector3i(-1, 0, -1),
+            new Vector3i(-1, -1, 1), new Vector3i(-1, -1, 0), new Vector3i(-1, -1, -1),
+        };
 
         #region BFS
         private void AddNeighborsToOpenSet(GraphNode currentNode)
@@ -316,103 +341,91 @@ namespace PathFind3D
         #endregion
 
         #region A*
-        private void AddNeighborsToSortedOpenSet(GraphNode currentNode)
+        private void AddNeighborsToOpenSortedSet(GraphNode currentNode, Vector3i endNodePos, PriorityQueue<GraphNode, float> openSet, HashSet<GraphNode> closedSet)
         {
-            lock (grid)
+            foreach (Vector3i direction in directions)
             {
-                Vector3i nodePos = currentNode.GridPosition;
-                foreach (var direction in mainDirections)
+                Vector3i newNodePos = currentNode.GridPosition + direction;
+
+                if (newNodePos.X < 0 || newNodePos.Y < 0 || newNodePos.Z < 0 ||
+                    newNodePos.X >= gridSize.X || newNodePos.Y >= gridSize.Y || newNodePos.Z >= gridSize.Z)
                 {
-                    Vector3i newNodePos = nodePos + direction;
+                    continue;
+                }
 
-                    if (newNodePos.X < 0 || newNodePos.Y < 0 || newNodePos.Z < 0 ||
-                        newNodePos.X >= gridSize.X || newNodePos.Y >= gridSize.Y || newNodePos.Z >= gridSize.Z)
+                GraphNode neighbor = grid[newNodePos.X, newNodePos.Y, newNodePos.Z];
+
+                if (closedSet.Contains(neighbor) || neighbor.DrawMD == DrawMode.Wall)
+                {
+                    continue;
+                }
+
+                float tentativeGScore = currentNode.gScore + direction.EuclideanLength;
+
+                if (!openSet.UnorderedItems.Any(x => x.Element == neighbor) || tentativeGScore < neighbor.gScore)
+                {
+                    neighbor.Parent = currentNode;
+                    neighbor.gScore = tentativeGScore;
+                    neighbor.hScore = (neighbor.GridPosition - endNodePos).EuclideanLengthSquared;
+                    neighbor.fScore = neighbor.gScore + neighbor.hScore;
+
+                    if (!openSet.UnorderedItems.Any(x => x.Element == neighbor))
                     {
-                        continue;
+                        openSet.Enqueue(neighbor, neighbor.fScore);
+                        if (neighbor.DrawMD != DrawMode.Start && neighbor.DrawMD != DrawMode.End)
+                        {
+                            neighbor.DrawMD = DrawMode.Open;
+                        }
                     }
-
-                    GraphNode neighbor = grid[newNodePos.X, newNodePos.Y, newNodePos.Z];
-
-                    lock (neighbor)
+                    else
                     {
-                        if (neighbor.dstFromStart >= currentNode.dstFromStart + 1 || neighbor.dstFromStart == 0)
-                        {
-                            neighbor.Parent = currentNode;
-                            neighbor.dstFromStart = currentNode.dstFromStart + 1;
-                        }
-
-                        if (closedSet.Contains(neighbor) || openSetSorted.Contains(neighbor))
-                        {
-                            continue;
-                        }
-
-                        if (neighbor.DrawMD == DrawMode.End)
-                        {
-                            neighbor.Parent = currentNode;
-                            continueSearch = false;
-                            openSetSorted.Clear();
-                            closedSet.Clear();
-                            Console.WriteLine("PathFound");
-                            BacktrackPath(neighbor);
-                            foreach (var item in grid)
-                            {
-                                if (item.DrawMD == DrawMode.Open)
-                                {
-                                    item.DrawMD = DrawMode.Air;
-                                }
-                            }
-                            return;
-                        }
-
-                        if (neighbor.DrawMD == DrawMode.Air)
-                        {
-                            openSetSorted.Add(neighbor);
-                        }
+                        openSet.EnqueueDequeue(neighbor, neighbor.fScore);
                     }
                 }
             }
         }
-        public void AStar(GraphNode startNode)
+        public void AStar(Vector3i startNodePos, Vector3i endNodePos)
         {
             Stopwatch stopwatch = new Stopwatch();
             stopwatch.Start();
 
-            openSetSorted = new(Comparer<GraphNode>.Create((x, y) => (x.dstToEnd - x.dstFromStart).CompareTo(y.dstToEnd - y.dstFromStart)));
-            openSetSorted.Clear();
-            closedSet.Clear();
+            PriorityQueue<GraphNode, float> openSet = new PriorityQueue<GraphNode, float>();
+            HashSet<GraphNode> closedSet = new HashSet<GraphNode>();
 
-            openSetSorted.Add(startNode);
+            GraphNode startNode = grid[startnodePos.X, startnodePos.Y, startnodePos.Z];
+            startNode.gScore = 0;
+            startNode.hScore = (startNodePos - endNodePos).EuclideanLengthSquared;
+            startNode.fScore = startNode.hScore;
+            openSet.Enqueue(startNode, startNode.fScore);
 
-            while (openSetSorted.Count > 0 && continueSearch)
+            while (openSet.Count > 0)
             {
-                GraphNode currentNode = openSetSorted.First();
-                openSetSorted.Remove(currentNode);
+                GraphNode currentNode = openSet.Dequeue();
+
+                if (currentNode.DrawMD == DrawMode.End)
+                {
+                    Console.WriteLine("Path found!");
+                    BacktrackPath(currentNode);
+                    break;
+                }
+
                 closedSet.Add(currentNode);
 
                 lock (grid)
                 {
-                    foreach (GraphNode node in openSetSorted)
+                    if (currentNode.DrawMD != DrawMode.Start && currentNode.DrawMD != DrawMode.End)
                     {
-                        if (node.DrawMD != DrawMode.Open)
-                        {
-                            node.DrawMD = DrawMode.Open;
-                        }
+                        currentNode.DrawMD = DrawMode.Closed;
                     }
 
-                    foreach (GraphNode node in closedSet)
-                    {
-                        if (node.DrawMD != DrawMode.Closed && node.DrawMD != DrawMode.Start && node.DrawMD != DrawMode.End)
-                        {
-                            node.DrawMD = DrawMode.Closed;
-                        }
-                    }
-
-                    AddNeighborsToSortedOpenSet(currentNode);
+                    AddNeighborsToOpenSortedSet(currentNode, endNodePos, openSet, closedSet);
                 }
             }
 
-            openSetSorted.Clear();
-            closedSet.Clear();
+            if (openSet.Count == 0)
+            {
+                Console.WriteLine("No path found");
+            }
 
             stopwatch.Stop();
             TimeSpan elapsedTime = stopwatch.Elapsed;
@@ -460,7 +473,6 @@ namespace PathFind3D
 
             if (ImGui.Button("Rebuild Grid"))
             {
-                reloadConfig();
                 rebuildGrid();
             }
 
@@ -492,7 +504,7 @@ namespace PathFind3D
                 grid[endNodePos.X - 1, endNodePos.Y - 1, endNodePos.Z - 1].DrawMD = DrawMode.End;
                 AStarThread = new Thread(() =>
                 {
-                    AStar(grid[startnodePos.X, startnodePos.Y, startnodePos.Z]);
+                    AStar(startnodePos, endNodePos);
                 });
 
                 AStarThread.Start();
@@ -516,8 +528,6 @@ namespace PathFind3D
 
             if (window.KeyboardState.IsKeyPressed(Keys.R))
             {
-                reloadConfig();
-
                 BFSPath.Clear();
                 rebuildGrid();
             }
@@ -550,7 +560,7 @@ namespace PathFind3D
                 grid[endNodePos.X - 1, endNodePos.Y - 1, endNodePos.Z - 1].DrawMD = DrawMode.End;
                 AStarThread = new Thread(() =>
                 {
-                    AStar(grid[startnodePos.X, startnodePos.Y, startnodePos.Z]);
+                    AStar(startnodePos, endNodePos);
                 });
 
                 AStarThread.Start();
@@ -626,8 +636,6 @@ namespace PathFind3D
                 }
             );
 
-            reloadConfig();
-
             rebuildGrid();
 
             window.RenderFrame += onRenderFrame;
@@ -642,19 +650,25 @@ namespace PathFind3D
             GL.Enable(EnableCap.DepthTest);
             GL.DepthFunc(DepthFunction.Less);
 
-            // alpha blending
+            // alpha blending (updated)
             GL.Enable(EnableCap.Blend);
             GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
+            GL.BlendEquation(BlendEquationMode.FuncAdd);
+
+            // Enable face culling
+            GL.Enable(EnableCap.CullFace);
+            GL.CullFace(CullFaceMode.Back);
+            GL.FrontFace(FrontFaceDirection.Ccw);
 
             SetupMatrices();
 
-            baseSize = MtH.cubeRootF(gridSize.X * gridSize.Y * gridSize.Z) * 0.125f + 0.01f;
+            baseSize = new Vector3(gridSize.X, gridSize.Y, gridSize.Z) * 0.125f + (0.01f, 0.01f, 0.01f);
 
             _controller = new ImGuiController(window.ClientSize.X, window.ClientSize.Y);
 
-            boxNode = new GraphNode(0.125f / 2, 0.125f / 2, 0.125f / 2)
+            boxNode = new GraphNode(Vector3i.Zero)
             {
-                BaseSize = baseSize,
+                BaseSize = gridSize * new Vector3(0.125f) + new Vector3(0.01f),
                 DrawMD = DrawMode.Wireframe
             };
             return true;
@@ -681,14 +695,12 @@ namespace PathFind3D
 
         private void onRenderFrame(FrameEventArgs args)
         {
-
             if (window == null || grid == null)
                 return;
 
             _controller.Update(window, (float)args.Time);
 
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit | ClearBufferMask.StencilBufferBit);
-            //ImGui.DockSpaceOverViewport();  // doesen`t work for some reason
 
             drawGrid();
 

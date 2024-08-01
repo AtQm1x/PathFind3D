@@ -10,14 +10,15 @@ namespace PathFind3D
         public Vector3 Position { get; set; }
         public Vector3i GridPosition { get; set; }
         public GraphNode? Parent { get; set; } = null;
-        //public List<GraphNode> Connections { get; set; } = new();
         public float AspectRatio { get; set; } = 1;
-        public Vector3 Rotation { get; set; } = new(0, 0, 0);
-        public float BaseSize = 0.125f;
+        public Vector3 Rotation { get; set; } = new Vector3(0, 0, 0);
+        public Vector3 BaseSize = new Vector3(0.125f);
         public DrawMode DrawMD { get; set; } = DrawMode.Wall;
 
-        public float dstToEnd = 0;
-        public float dstFromStart = 0;
+        public float dstFromStart = float.MaxValue;
+        public float gScore { get; set; } = float.MaxValue;
+        public float hScore { get; set; } = 0;
+        public float fScore { get; set; } = float.MaxValue;
 
         private static readonly Vector4 ColorWhite = new Vector4(1, 1, 1, 1);
 
@@ -83,16 +84,16 @@ namespace PathFind3D
         private void InitializeCubeVertices()
         {
             cubeVertices = new float[]
-            {
-            -0.500000f * BaseSize, -0.500000f * BaseSize, 0.500000f * BaseSize,
-            0.500000f * BaseSize, -0.500000f * BaseSize, 0.500000f * BaseSize,
-            -0.500000f * BaseSize, 0.500000f * BaseSize, 0.500000f * BaseSize,
-            0.500000f * BaseSize, 0.500000f * BaseSize, 0.500000f * BaseSize,
-            -0.500000f * BaseSize, 0.500000f * BaseSize, -0.500000f * BaseSize,
-            0.500000f * BaseSize, 0.500000f * BaseSize, -0.500000f * BaseSize,
-            -0.500000f * BaseSize, -0.500000f * BaseSize, -0.500000f * BaseSize,
-            0.500000f * BaseSize, -0.500000f * BaseSize, -0.500000f * BaseSize
-            };
+        {
+            -0.500000f * BaseSize.X, -0.500000f * BaseSize.Y, 0.500000f * BaseSize.Z,
+            0.500000f * BaseSize.X, -0.500000f * BaseSize.Y, 0.500000f * BaseSize.Z,
+            -0.500000f * BaseSize.X, 0.500000f * BaseSize.Y, 0.500000f * BaseSize.Z,
+            0.500000f * BaseSize.X, 0.500000f * BaseSize.Y, 0.500000f * BaseSize.Z,
+            -0.500000f * BaseSize.X, 0.500000f * BaseSize.Y, -0.500000f * BaseSize.Z,
+            0.500000f * BaseSize.X, 0.500000f * BaseSize.Y, -0.500000f * BaseSize.Z,
+            -0.500000f * BaseSize.X, -0.500000f * BaseSize.Y, -0.500000f * BaseSize.Z,
+            0.500000f * BaseSize.X, -0.500000f * BaseSize.Y, -0.500000f * BaseSize.Z
+        };
         }
 
         private Matrix4 CreateRotationMatrix(Vector3 rotation)
@@ -127,7 +128,7 @@ namespace PathFind3D
                 return;
 
             // Ensure cube vertices are initialized once
-            if (cubeVertices[0] != -0.500000f * BaseSize)
+            if (cubeVertices[0] != -0.500000f * BaseSize.X)
             {
                 InitializeCubeVertices();
             }
@@ -173,7 +174,7 @@ namespace PathFind3D
                     break;
 
                 case DrawMode.Path:
-                    fillCube((0, 1, 1, 0.1f));
+                    fillCube((0, 1, 1, 0.25f));
                     drawWireframe();
                     break;
 
