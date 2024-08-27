@@ -394,6 +394,8 @@ namespace PathFind3D
             HashSet<GraphNode> closedSet = new HashSet<GraphNode>();
 
             GraphNode startNode = grid[startnodePos.X, startnodePos.Y, startnodePos.Z];
+
+            // initialize start node
             startNode.gScore = 0;
             startNode.hScore = (startNodePos - endNodePos).EuclideanLengthSquared;
             startNode.fScore = startNode.hScore;
@@ -403,7 +405,7 @@ namespace PathFind3D
             {
                 GraphNode currentNode = openSet.Dequeue();
 
-                // if we find the end - backtrack the path
+                // check if we've reached the end node
                 if (currentNode.DrawMD == DrawMode.End)
                 {
                     Console.WriteLine("Path found!");
@@ -415,6 +417,7 @@ namespace PathFind3D
 
                 lock (grid)
                 {
+                    // update node color for visualization
                     if (currentNode.DrawMD != DrawMode.Start && currentNode.DrawMD != DrawMode.End)
                     {
                         currentNode.DrawMD = DrawMode.Closed;
@@ -424,6 +427,7 @@ namespace PathFind3D
                 }
             }
 
+            // no path found
             if (openSet.Count == 0)
             {
                 Console.WriteLine("No path found");
@@ -439,6 +443,8 @@ namespace PathFind3D
         {
             int PathLen = 0;
             GraphNode currentNode = endNode;
+
+            // trace path from end to start
             while (currentNode.Parent != null && currentNode.DrawMD != DrawMode.Start)
             {
                 currentNode = currentNode.Parent;
@@ -463,6 +469,7 @@ namespace PathFind3D
             ImGui.Begin("Config");
             ImGui.SetWindowFontScale(1.2f);
 
+            // check if mouse is over the ImGui window
             NVector2 windowPos = ImGui.GetWindowPos();
             NVector2 windowSize = ImGui.GetWindowSize();
             NVector2 mousePos = ImGui.GetMousePos();
@@ -472,7 +479,7 @@ namespace PathFind3D
                                mousePos.Y >= windowPos.Y &&
                                mousePos.Y <= windowPos.Y + windowSize.Y;
 
-
+            // gui buttons for various actions
             if (ImGui.Button("Rebuild Grid"))
             {
                 rebuildGrid();
@@ -485,7 +492,7 @@ namespace PathFind3D
 
             if (ImGui.Button("Clear Path"))
             {
-
+                clearPath();
             }
 
             if (ImGui.Button("run BFS"))
@@ -512,16 +519,17 @@ namespace PathFind3D
                 AStarThread.Start();
             }
 
-            //ImGui.SetWindowFontScale(originalScale);
             ImGui.End();
         }
 
         #endregion
+
         private void handleUserInput()
         {
             if (window == null)
                 return;
 
+            // handle keyboard input
             if (window.KeyboardState.IsKeyDown(Keys.Escape))
             {
                 Shutdown();
@@ -570,24 +578,7 @@ namespace PathFind3D
 
             if (window.KeyboardState.IsKeyPressed(Keys.Q))
             {
-                continueSearch = false;
-
-                AStarThread?.Join();
-                BFSThread?.Join();
-                openSetSorted.Clear();
-                openSet.Clear();
-                closedSet.Clear();
-
-                foreach (GraphNode node in grid)
-                {
-                    if (node.DrawMD == DrawMode.Closed || node.DrawMD == DrawMode.Open || node.DrawMD == DrawMode.Path)
-                        node.DrawMD = DrawMode.Air;
-
-                    node.Parent = null;
-                    node.dstFromStart = 0;
-                }
-
-                continueSearch = true;
+                clearPath();
             }
 
             if (window.KeyboardState.IsKeyPressed(Keys.H))
@@ -609,6 +600,29 @@ namespace PathFind3D
                 frameCount = 0;
             }
         }
+        private void clearPath()
+        {
+
+            // reset search state
+            continueSearch = false;
+
+            AStarThread?.Join();
+            BFSThread?.Join();
+            openSetSorted.Clear();
+            openSet.Clear();
+            closedSet.Clear();
+
+            foreach (GraphNode node in grid)
+            {
+                if (node.DrawMD == DrawMode.Closed || node.DrawMD == DrawMode.Open || node.DrawMD == DrawMode.Path)
+                    node.DrawMD = DrawMode.Air;
+
+                node.Parent = null;
+                node.dstFromStart = 0;
+            }
+
+            continueSearch = true;
+        }
 
         public void Shutdown()
         {
@@ -625,6 +639,7 @@ namespace PathFind3D
 
         public bool Initialize()
         {
+            // create and configure the game window
             window = new GameWindow(
                 GameWindowSettings.Default,
                 new NativeWindowSettings
@@ -640,6 +655,7 @@ namespace PathFind3D
 
             rebuildGrid();
 
+            // set up event handlers
             window.RenderFrame += onRenderFrame;
             window.UpdateFrame += onUpdateFrame;
             window.Resize += onResize;
@@ -648,16 +664,16 @@ namespace PathFind3D
 
             GL.Viewport(0, 0, resX, resY);
 
-            // depth testing
+            // enable depth testing
             GL.Enable(EnableCap.DepthTest);
             GL.DepthFunc(DepthFunction.Less);
 
-            // alpha blending
+            // enable alpha blending
             GL.Enable(EnableCap.Blend);
             GL.BlendFunc(BlendingFactor.SrcAlpha, BlendingFactor.OneMinusSrcAlpha);
             GL.BlendEquation(BlendEquationMode.FuncAdd);
 
-            // face culling
+            // enable face culling
             GL.Enable(EnableCap.CullFace);
             GL.CullFace(CullFaceMode.Back);
             GL.FrontFace(FrontFaceDirection.Ccw);
@@ -683,6 +699,7 @@ namespace PathFind3D
 
             updateGrid();
 
+            // update box node if necessary
             if ((boxNode?.Rotation != rot || boxNode?.AspectRatio != aspectRatio) && boxNode != null)
             {
                 boxNode.Rotation = rot;
@@ -720,10 +737,12 @@ namespace PathFind3D
             if (window == null)
                 return;
 
+            // update aspect ratio and viewport
             aspectRatio = (float)args.Width / args.Height;
             GL.Viewport(0, 0, args.Width, args.Height);
             _controller.WindowResized(args.Width, args.Height);
 
+            // update projection matrix
             float fov = MathHelper.DegreesToRadians(45.0f);
             projectionMatrix = Matrix4.CreatePerspectiveFieldOfView(fov, aspectRatio, 0.1f, 100.0f);
 
@@ -733,11 +752,11 @@ namespace PathFind3D
 
         private void onMouseWheel(MouseWheelEventArgs e)
         {
+            // adjust zoom based on mouse wheel
             zoom -= e.OffsetY * 0.2f;
             zoom = Math.Max(0.1f, Math.Min(zoom, 1000.0f));
             cameraPosition.Z = zoom;
             UpdateViewMatrix();
-
         }
 
         private void onMouseMove(MouseMoveEventArgs e)
@@ -748,22 +767,22 @@ namespace PathFind3D
             if (_isMouseOverMenu)
                 return;
 
+            // handle camera rotation
             if (window.MouseState.IsButtonDown(MouseButton.Left))
             {
                 rot.Y += (window.MouseState.Delta.X / 100f);
                 rot.X += (window.MouseState.Delta.Y / 100f);
 
                 rot.X = Math.Max(-1.5f, Math.Min(1.5f, rot.X));
-
             }
 
+            // handle camera panning
             if (window.MouseState.IsButtonDown(MouseButton.Middle))
             {
                 cameraPosition.X -= window.MouseState.Delta.X / 300f;
                 cameraPosition.Y += window.MouseState.Delta.Y / 300f;
 
                 UpdateViewMatrix();
-
             }
         }
     }
