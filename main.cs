@@ -454,6 +454,13 @@ namespace PathFind3D
                     PathLen++;
                 }
             }
+            foreach (var item in grid)
+            {
+                if (item.DrawMD == DrawMode.Closed || item.DrawMD == DrawMode.Open)
+                {
+                    item.DrawMD = DrawMode.Air;
+                }
+            }
             Console.WriteLine($"Path length: {endNode.dstFromStart - 1}");
             updateGrid();
         }
@@ -699,7 +706,7 @@ namespace PathFind3D
 
             updateGrid();
 
-            // update box node if necessary
+            // update box if necessary
             if ((boxNode?.Rotation != rot || boxNode?.AspectRatio != aspectRatio) && boxNode != null)
             {
                 boxNode.Rotation = rot;
@@ -752,7 +759,7 @@ namespace PathFind3D
 
         private void onMouseWheel(MouseWheelEventArgs e)
         {
-            // adjust zoom based on mouse wheel
+            // zoom
             zoom -= e.OffsetY * 0.2f;
             zoom = Math.Max(0.1f, Math.Min(zoom, 1000.0f));
             cameraPosition.Z = zoom;
@@ -767,7 +774,7 @@ namespace PathFind3D
             if (_isMouseOverMenu)
                 return;
 
-            // handle camera rotation
+            // camera rotation
             if (window.MouseState.IsButtonDown(MouseButton.Left))
             {
                 rot.Y += (window.MouseState.Delta.X / 100f);
@@ -776,7 +783,7 @@ namespace PathFind3D
                 rot.X = Math.Max(-1.5f, Math.Min(1.5f, rot.X));
             }
 
-            // handle camera panning
+            // camera panning
             if (window.MouseState.IsButtonDown(MouseButton.Middle))
             {
                 cameraPosition.X -= window.MouseState.Delta.X / 300f;
