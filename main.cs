@@ -469,6 +469,7 @@ namespace PathFind3D
 
         #region GUI
 
+        bool _input_grid_size = false;
         bool _showPopup = false;
         bool _isMouseOverMenu = false;
         private void ProcessGUI()
@@ -524,6 +525,13 @@ namespace PathFind3D
                 });
 
                 AStarThread.Start();
+            }
+
+            if (_input_grid_size)
+            {
+                ImGui.Begin("Grid Size Input");
+
+                ImGui.InputInt
             }
 
             ImGui.End();
