@@ -1,7 +1,7 @@
 ﻿using OpenTK.Graphics.OpenGL;
 using System;
 
-namespace program
+namespace PathFind3D
 {
     public class OpenTKProgram
     {
