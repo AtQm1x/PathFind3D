@@ -57,7 +57,7 @@ namespace PathFind3D
         private GraphNode? boxNode;
         private Vector3 baseSize;
         private bool drawWalls = true;
-        private Vector3i startnodePos = (0, 0, 0);
+        private Vector3i startNodePos = (0, 0, 0);
         private Vector3i endNodePos = (gridSize.X, gridSize.Y, gridSize.Z);
 
 
@@ -161,7 +161,7 @@ namespace PathFind3D
                             nd.DrawMD = DrawMode.Wall;
 
                         // set start and end nodes
-                        if (i == startnodePos.X && j == startnodePos.Y && k == startnodePos.Z)
+                        if (i == startNodePos.X && j == startNodePos.Y && k == startNodePos.Z)
                             nd.DrawMD = DrawMode.Start;
 
                         if (i == endNodePos.X - 1 && j == endNodePos.Y - 1 && k == endNodePos.Z - 1)
@@ -275,7 +275,7 @@ namespace PathFind3D
                     openSet.Clear();
                     closedSet.Clear();
                     Console.WriteLine("PathFound");
-                    grid[startnodePos.X, startnodePos.Y, startnodePos.Z].Parent = null;
+                    grid[startNodePos.X, startNodePos.Y, startNodePos.Z].Parent = null;
                     BacktrackPath(neighbor);
 
                     // reset open nodes to air
@@ -393,7 +393,7 @@ namespace PathFind3D
             PriorityQueue<GraphNode, float> openSet = new PriorityQueue<GraphNode, float>();
             HashSet<GraphNode> closedSet = new HashSet<GraphNode>();
 
-            GraphNode startNode = grid[startnodePos.X, startnodePos.Y, startnodePos.Z];
+            GraphNode startNode = grid[this.startNodePos.X, this.startNodePos.Y, this.startNodePos.Z];
 
             // initialize start node
             startNode.gScore = 0;
@@ -472,6 +472,8 @@ namespace PathFind3D
         bool _input_grid_size = false;
         bool _showPopup = false;
         bool _isMouseOverMenu = false;
+
+        int gsA = gridSize.X, gsB = gridSize.Y, gsC = gridSize.Z;
         private void ProcessGUI()
         {
             ImGui.Begin("Config");
@@ -482,10 +484,10 @@ namespace PathFind3D
             NVector2 windowSize = ImGui.GetWindowSize();
             NVector2 mousePos = ImGui.GetMousePos();
 
-            _isMouseOverMenu = mousePos.X >= windowPos.X &&
+            _isMouseOverMenu = (mousePos.X >= windowPos.X &&
                                mousePos.X <= windowPos.X + windowSize.X &&
                                mousePos.Y >= windowPos.Y &&
-                               mousePos.Y <= windowPos.Y + windowSize.Y;
+                               mousePos.Y <= windowPos.Y + windowSize.Y);
 
             // gui buttons for various actions
             if (ImGui.Button("Rebuild Grid"))
@@ -505,11 +507,11 @@ namespace PathFind3D
 
             if (ImGui.Button("run BFS"))
             {
-                grid[startnodePos.X, startnodePos.Y, startnodePos.Z].DrawMD = DrawMode.Start;
+                grid[startNodePos.X, startNodePos.Y, startNodePos.Z].DrawMD = DrawMode.Start;
                 grid[endNodePos.X - 1, endNodePos.Y - 1, endNodePos.Z - 1].DrawMD = DrawMode.End;
                 BFSThread = new Thread(() =>
                 {
-                    BreadthFirstSearch(grid[startnodePos.X, startnodePos.Y, startnodePos.Z]);
+                    BreadthFirstSearch(grid[startNodePos.X, startNodePos.Y, startNodePos.Z]);
                 });
 
                 BFSThread.Start();
@@ -517,21 +519,50 @@ namespace PathFind3D
 
             if (ImGui.Button("run A*"))
             {
-                grid[startnodePos.X, startnodePos.Y, startnodePos.Z].DrawMD = DrawMode.Start;
+                grid[startNodePos.X, startNodePos.Y, startNodePos.Z].DrawMD = DrawMode.Start;
                 grid[endNodePos.X - 1, endNodePos.Y - 1, endNodePos.Z - 1].DrawMD = DrawMode.End;
                 AStarThread = new Thread(() =>
                 {
-                    AStar(startnodePos, endNodePos);
+                    AStar(startNodePos, endNodePos);
                 });
 
                 AStarThread.Start();
             }
 
+            if (ImGui.Button(_input_grid_size == false ? "Open Grid Config" : "Close Grid Config"))
+            {
+                _input_grid_size = !_input_grid_size;
+            }
+
             if (_input_grid_size)
             {
                 ImGui.Begin("Grid Size Input");
+                // check if mouse is over the ImGui window
+                windowPos = ImGui.GetWindowPos();
+                windowSize = ImGui.GetWindowSize();
+                mousePos = ImGui.GetMousePos();
 
-                ImGui.InputInt
+                _isMouseOverMenu = _isMouseOverMenu || (mousePos.X >= windowPos.X &&
+                                   mousePos.X <= windowPos.X + windowSize.X &&
+                                   mousePos.Y >= windowPos.Y &&
+                                   mousePos.Y <= windowPos.Y + windowSize.Y);
+
+
+
+                ImGui.InputInt("X",ref gsA);
+                ImGui.InputInt("Y",ref gsB);
+                ImGui.InputInt("Z",ref gsC);
+
+                if (ImGui.Button("Apply"))
+                {
+                    gsA = Math.Max(gsA, 1);
+                    gsB = Math.Max(gsB, 1);
+                    gsC = Math.Max(gsC, 1);
+                    gridSize = (gsA, gsB, gsC);
+                    startNodePos = Vector3i.Clamp(startNodePos, Vector3i.Zero, gridSize);
+                    endNodePos = Vector3i.Clamp(endNodePos, Vector3i.Zero, gridSize);
+                    rebuildGrid();
+                }
             }
 
             ImGui.End();
@@ -568,11 +599,11 @@ namespace PathFind3D
                 }
                 else
                 {
-                    grid[startnodePos.X, startnodePos.Y, startnodePos.Z].DrawMD = DrawMode.Start;
+                    grid[startNodePos.X, startNodePos.Y, startNodePos.Z].DrawMD = DrawMode.Start;
                     grid[endNodePos.X - 1, endNodePos.Y - 1, endNodePos.Z - 1].DrawMD = DrawMode.End;
                     BFSThread = new Thread(() =>
                     {
-                        BreadthFirstSearch(grid[startnodePos.X, startnodePos.Y, startnodePos.Z]);
+                        BreadthFirstSearch(grid[startNodePos.X, startNodePos.Y, startNodePos.Z]);
                     });
 
                     BFSThread.Start();
@@ -581,11 +612,11 @@ namespace PathFind3D
 
             if (window.KeyboardState.IsKeyPressed(Keys.G))
             {
-                grid[startnodePos.X, startnodePos.Y, startnodePos.Z].DrawMD = DrawMode.Start;
+                grid[startNodePos.X, startNodePos.Y, startNodePos.Z].DrawMD = DrawMode.Start;
                 grid[endNodePos.X - 1, endNodePos.Y - 1, endNodePos.Z - 1].DrawMD = DrawMode.End;
                 AStarThread = new Thread(() =>
                 {
-                    AStar(startnodePos, endNodePos);
+                    AStar(startNodePos, endNodePos);
                 });
 
                 AStarThread.Start();
@@ -786,7 +817,7 @@ namespace PathFind3D
             if (window.MouseState.IsButtonDown(MouseButton.Left))
             {
                 rot.Y += (window.MouseState.Delta.X / 100f);
-                rot.X += (window.MouseState.Delta.Y / 100f);
+                rot.X += (window.MouseState.Delta.Y / 100f);    
 
                 rot.X = Math.Max(-1.5f, Math.Min(1.5f, rot.X));
             }
