@@ -483,6 +483,9 @@ namespace PathFind3D
             ImGui.SetNextWindowViewport(viewport.ID);
             ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 0.0f);
             ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0.0f);
+
+            ImGui.PushStyleColor(ImGuiCol.WindowBg, new NVector4(0.0f, 0.0f, 0.0f, 0.0f));
+
             ImGuiWindowFlags windowFlags = ImGuiWindowFlags.MenuBar | ImGuiWindowFlags.NoDocking;
             windowFlags |= ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove;
             windowFlags |= ImGuiWindowFlags.NoBringToFrontOnFocus | ImGuiWindowFlags.NoNavFocus;
