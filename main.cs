@@ -476,6 +476,23 @@ namespace PathFind3D
         int gsA = gridSize.X, gsB = gridSize.Y, gsC = gridSize.Z;
         private void ProcessGUI()
         {
+            // Create a full-screen dockspace
+            ImGuiViewportPtr viewport = ImGui.GetMainViewport();
+            ImGui.SetNextWindowPos(viewport.Pos);
+            ImGui.SetNextWindowSize(viewport.Size);
+            ImGui.SetNextWindowViewport(viewport.ID);
+            ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 0.0f);
+            ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0.0f);
+            ImGuiWindowFlags windowFlags = ImGuiWindowFlags.MenuBar | ImGuiWindowFlags.NoDocking;
+            windowFlags |= ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove;
+            windowFlags |= ImGuiWindowFlags.NoBringToFrontOnFocus | ImGuiWindowFlags.NoNavFocus;
+
+            ImGui.Begin("DockSpace Demo", windowFlags);
+            ImGui.PopStyleVar(2);
+
+            var dockspaceId = ImGui.GetID("MyDockSpace");
+            ImGui.DockSpace(dockspaceId, new NVector2(0.0f, 0.0f), ImGuiDockNodeFlags.None);
+
             ImGui.Begin("Config");
             ImGui.SetWindowFontScale(1.2f);
 
@@ -549,9 +566,9 @@ namespace PathFind3D
 
 
 
-                ImGui.InputInt("X",ref gsA);
-                ImGui.InputInt("Y",ref gsB);
-                ImGui.InputInt("Z",ref gsC);
+                ImGui.InputInt("X", ref gsA);
+                ImGui.InputInt("Y", ref gsB);
+                ImGui.InputInt("Z", ref gsC);
 
                 if (ImGui.Button("Apply"))
                 {
@@ -730,6 +747,12 @@ namespace PathFind3D
 
             _controller = new ImGuiController(window.ClientSize.X, window.ClientSize.Y);
 
+            var io = ImGui.GetIO();
+            io.ConfigFlags |= ImGuiConfigFlags.DockingEnable;
+            io.ConfigFlags |= ImGuiConfigFlags.ViewportsEnable;
+            io.ConfigViewportsNoAutoMerge = true;
+            io.ConfigViewportsNoTaskBarIcon = true;
+
             boxNode = new GraphNode(Vector3i.Zero)
             {
                 BaseSize = gridSize * new Vector3(0.125f) + new Vector3(0.01f),
@@ -763,17 +786,22 @@ namespace PathFind3D
             if (window == null || grid == null)
                 return;
 
-            _controller.Update(window, (float)args.Time);
+            GL.ClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+            GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
-            GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit | ClearBufferMask.StencilBufferBit);
+            GL.Viewport(0, 0, window.ClientSize.X, window.ClientSize.Y);
+
+            GL.Enable(EnableCap.DepthTest);
+
+            _controller.Update(window, (float)args.Time);
+            ProcessGUI();
+            _controller.Render();
 
             drawGrid();
-
-            ProcessGUI();
-
             boxNode?.Draw(viewMatrix, projectionMatrix);
 
-            _controller.Render();
+            GL.Disable(EnableCap.DepthTest);
+
             ImGuiController.CheckGLError("End of frame");
             window.SwapBuffers();
         }
@@ -817,7 +845,7 @@ namespace PathFind3D
             if (window.MouseState.IsButtonDown(MouseButton.Left))
             {
                 rot.Y += (window.MouseState.Delta.X / 100f);
-                rot.X += (window.MouseState.Delta.Y / 100f);    
+                rot.X += (window.MouseState.Delta.Y / 100f);
 
                 rot.X = Math.Max(-1.5f, Math.Min(1.5f, rot.X));
             }
