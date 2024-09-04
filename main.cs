@@ -476,25 +476,7 @@ namespace PathFind3D
         int gsA = gridSize.X, gsB = gridSize.Y, gsC = gridSize.Z;
         private void ProcessGUI()
         {
-            // Create a full-screen dockspace
-            ImGuiViewportPtr viewport = ImGui.GetMainViewport();
-            ImGui.SetNextWindowPos(viewport.Pos);
-            ImGui.SetNextWindowSize(viewport.Size);
-            ImGui.SetNextWindowViewport(viewport.ID);
-            ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 0.0f);
-            ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0.0f);
-
-            ImGui.PushStyleColor(ImGuiCol.WindowBg, new NVector4(0.0f, 0.0f, 0.0f, 0.0f));
-
-            ImGuiWindowFlags windowFlags = ImGuiWindowFlags.MenuBar | ImGuiWindowFlags.NoDocking;
-            windowFlags |= ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoResize | ImGuiWindowFlags.NoMove;
-            windowFlags |= ImGuiWindowFlags.NoBringToFrontOnFocus | ImGuiWindowFlags.NoNavFocus;
-
-            ImGui.Begin("DockSpace Demo", windowFlags);
-            ImGui.PopStyleVar(2);
-
-            var dockspaceId = ImGui.GetID("MyDockSpace");
-            ImGui.DockSpace(dockspaceId, new NVector2(0.0f, 0.0f), ImGuiDockNodeFlags.None);
+            ImGui.DockSpaceOverViewport(ImGui.GetMainViewport().ID, ImGui.GetMainViewport(), ImGuiDockNodeFlags.PassthruCentralNode);
 
             ImGui.Begin("Config");
             ImGui.SetWindowFontScale(1.2f);
@@ -727,6 +709,7 @@ namespace PathFind3D
             window.Resize += onResize;
             window.MouseWheel += onMouseWheel;
             window.MouseMove += onMouseMove;
+            window.TextInput += onTextInput;
 
             GL.Viewport(0, 0, resX, resY);
 
@@ -764,6 +747,11 @@ namespace PathFind3D
             return true;
         }
 
+        private void onTextInput(TextInputEventArgs e)
+        {
+            _controller.PressChar((char)e.Unicode);
+        }
+
         private void onUpdateFrame(FrameEventArgs e)
         {
             if (window == null)
@@ -789,21 +777,21 @@ namespace PathFind3D
             if (window == null || grid == null)
                 return;
 
-            GL.ClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+            GL.ClearColor(0.2f, 0.3f, 0.4f, 1.0f);
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
 
             GL.Viewport(0, 0, window.ClientSize.X, window.ClientSize.Y);
 
             GL.Enable(EnableCap.DepthTest);
 
-            _controller.Update(window, (float)args.Time);
-            ProcessGUI();
-            _controller.Render();
-
             drawGrid();
             boxNode?.Draw(viewMatrix, projectionMatrix);
 
             GL.Disable(EnableCap.DepthTest);
+
+            _controller.Update(window, (float)args.Time);
+            ProcessGUI();
+            _controller.Render();
 
             ImGuiController.CheckGLError("End of frame");
             window.SwapBuffers();
@@ -834,6 +822,7 @@ namespace PathFind3D
             zoom = Math.Max(0.1f, Math.Min(zoom, 1000.0f));
             cameraPosition.Z = zoom;
             UpdateViewMatrix();
+            _controller.MouseScroll(e.Offset);
         }
 
         private void onMouseMove(MouseMoveEventArgs e)
