@@ -39,7 +39,11 @@ namespace PathFind3D
         private float aspectRatio = 16f / 9;
         private float nodeDistance = 0.125f;
         private Random rng = new(DateTime.Now.Millisecond * DateTime.Now.Second);
+
         private static Vector3i gridSize = new(32, 16, 32);
+        private static Vector3i startNodePos = (0, 0, 0);
+        private static Vector3i endNodePos = (gridSize.X, gridSize.Y, gridSize.Z);
+
         private bool exit = false;
         private Matrix4 projectionMatrix;
         private Matrix4 viewMatrix;
@@ -57,8 +61,6 @@ namespace PathFind3D
         private GraphNode? boxNode;
         private Vector3 baseSize;
         private bool drawWalls = true;
-        private Vector3i startNodePos = (0, 0, 0);
-        private Vector3i endNodePos = (gridSize.X, gridSize.Y, gridSize.Z);
 
 
         List<GraphNode> AstarPath = new();
@@ -105,12 +107,17 @@ namespace PathFind3D
 
         #endregion
 
-        #region grid and config
+        #region grid
 
         private void rebuildGrid()
         {
             // stop any ongoing search
             continueSearch = false;
+            gridSize.X = Math.Max(gridSize.X, 1);
+            gridSize.Y = Math.Max(gridSize.Y, 1);
+            gridSize.Z = Math.Max(gridSize.Z, 1);
+            startNodePos = Vector3i.Clamp(startNodePos, Vector3i.Zero, gridSize);
+            endNodePos = Vector3i.Clamp(endNodePos, Vector3i.Zero, gridSize);
             Thread thread = new Thread(() =>
             {
                 runRebuildGridThread(ref grid);
@@ -393,7 +400,7 @@ namespace PathFind3D
             PriorityQueue<GraphNode, float> openSet = new PriorityQueue<GraphNode, float>();
             HashSet<GraphNode> closedSet = new HashSet<GraphNode>();
 
-            GraphNode startNode = grid[this.startNodePos.X, this.startNodePos.Y, this.startNodePos.Z];
+            GraphNode startNode = grid[startNodePos.X, startNodePos.Y, startNodePos.Z];
 
             // initialize start node
             startNode.gScore = 0;
@@ -469,27 +476,32 @@ namespace PathFind3D
 
         #region GUI
 
+        private void updateMousePos()
+        {
+            // check if mouse is over the ImGui window
+            NVector2 windowPos = ImGui.GetWindowPos();
+            NVector2 windowSize = ImGui.GetWindowSize();
+
+            _isMouseOverMenu |= (mousePos.X >= windowPos.X &&
+                               mousePos.X <= windowPos.X + windowSize.X &&
+                               mousePos.Y >= windowPos.Y &&
+                               mousePos.Y <= windowPos.Y + windowSize.Y);
+        }
+
+        NVector2 mousePos;
         bool _input_grid_size = false;
-        bool _showPopup = false;
         bool _isMouseOverMenu = false;
 
-        int gsA = gridSize.X, gsB = gridSize.Y, gsC = gridSize.Z;
+        int gsX = gridSize.X, gsY = gridSize.Y, gsZ = gridSize.Z, snX = startNodePos.X, snY = startNodePos.Y, snZ = startNodePos.Z, enX = endNodePos.X, enY = endNodePos.Y, enZ = endNodePos.Z;
         private void ProcessGUI()
         {
             ImGui.DockSpaceOverViewport(ImGui.GetMainViewport().ID, ImGui.GetMainViewport(), ImGuiDockNodeFlags.PassthruCentralNode);
 
-            ImGui.Begin("Config");
+            ImGui.Begin("Control");
             ImGui.SetWindowFontScale(1.2f);
-
-            // check if mouse is over the ImGui window
-            NVector2 windowPos = ImGui.GetWindowPos();
-            NVector2 windowSize = ImGui.GetWindowSize();
-            NVector2 mousePos = ImGui.GetMousePos();
-
-            _isMouseOverMenu = (mousePos.X >= windowPos.X &&
-                               mousePos.X <= windowPos.X + windowSize.X &&
-                               mousePos.Y >= windowPos.Y &&
-                               mousePos.Y <= windowPos.Y + windowSize.Y);
+            _isMouseOverMenu = false;
+            mousePos = ImGui.GetMousePos();
+            updateMousePos();
 
             // gui buttons for various actions
             if (ImGui.Button("Rebuild Grid"))
@@ -531,38 +543,36 @@ namespace PathFind3D
                 AStarThread.Start();
             }
 
-            if (ImGui.Button(_input_grid_size == false ? "Open Grid Config" : "Close Grid Config"))
+            if (ImGui.Button(_input_grid_size == false ? "Open Config" : "Close Config"))
             {
                 _input_grid_size = !_input_grid_size;
             }
 
             if (_input_grid_size)
             {
-                ImGui.Begin("Grid Size Input");
-                // check if mouse is over the ImGui window
-                windowPos = ImGui.GetWindowPos();
-                windowSize = ImGui.GetWindowSize();
-                mousePos = ImGui.GetMousePos();
+                ImGui.Begin("Config");
+                updateMousePos();
 
-                _isMouseOverMenu = _isMouseOverMenu || (mousePos.X >= windowPos.X &&
-                                   mousePos.X <= windowPos.X + windowSize.X &&
-                                   mousePos.Y >= windowPos.Y &&
-                                   mousePos.Y <= windowPos.Y + windowSize.Y);
+                ImGui.Text("Grid Size");
+                ImGui.InputInt("X", ref gsX);
+                ImGui.InputInt("Y", ref gsY);
+                ImGui.InputInt("Z", ref gsZ);
 
+                ImGui.Text("Start Node");
+                ImGui.InputInt("X ", ref snX);
+                ImGui.InputInt("Y ", ref snY);
+                ImGui.InputInt("Z ", ref snZ);
 
-
-                ImGui.InputInt("X", ref gsA);
-                ImGui.InputInt("Y", ref gsB);
-                ImGui.InputInt("Z", ref gsC);
+                ImGui.Text("End Node");
+                ImGui.InputInt("X  ", ref enX);
+                ImGui.InputInt("Y  ", ref enY);
+                ImGui.InputInt("Z  ", ref enZ);
 
                 if (ImGui.Button("Apply"))
                 {
-                    gsA = Math.Max(gsA, 1);
-                    gsB = Math.Max(gsB, 1);
-                    gsC = Math.Max(gsC, 1);
-                    gridSize = (gsA, gsB, gsC);
-                    startNodePos = Vector3i.Clamp(startNodePos, Vector3i.Zero, gridSize);
-                    endNodePos = Vector3i.Clamp(endNodePos, Vector3i.Zero, gridSize);
+                    gridSize = new(gsX, gsY, gsZ);
+                    startNodePos = new(snX, snY, snZ);
+                    endNodePos = new(enX, enY, enZ);
                     rebuildGrid();
                 }
             }
