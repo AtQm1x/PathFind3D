@@ -17,10 +17,39 @@ using NVector4 = System.Numerics.Vector4;
 namespace PathFind3D
 {
     // enum for different rendering modes
-    public enum DrawMode { Wireframe, Wall, Air, Start, End, Open, Closed, Path, PathAstar, PathBFS }
+    public enum DrawMode { Wireframe, Wall, Air, Start, End, Open, Closed, Path }
+    public enum NodeState { Conductor, Dielectric, Start, End, Path }
 
     public class main
     {
+        /* 1. доля частинок провідника в першій провідній жилі в мометн виникання та довжина цієї жили
+         * 2. дисперсія кількості в жилі
+         * 3. дисперсія електро провідності
+         *
+         *  діелектрик <> провідник
+         *  поперечний розмір жили
+         *  електропровідність ділянок
+         *  монодисперсія
+         *  
+         *  
+         *  
+         *  
+         *  
+         */
+
+        // не ураховувати на гранях
+        // 
+        double avgDispersion(params double[] vals)
+        {
+            double avg = vals.Average();
+            double sum = 0;
+            foreach (double item in vals)
+            {
+                sum += (item - avg) * (item - avg);
+            }
+            return Math.Sqrt(sum / vals.Length);
+        }
+
         public main(int resX, int resY, string title)
         {
             this.resX = resX;
@@ -52,7 +81,7 @@ namespace PathFind3D
         private GraphNode[,,] grid = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
         private Vector3 rot = new(0);
 
-        private double nodeDensity = 0.1;
+        private double obstacleDensity = 0.2;
 
         private bool continueSearch = true;
         private List<GraphNode> openSet = new();
@@ -75,7 +104,7 @@ namespace PathFind3D
         Thread? AStarThread;
 
 
-        Vector3i[] mainDirections =
+        static Vector3i[] mainDirections =
         {
             (1, 0, 0),
             (-1, 0, 0),
@@ -84,7 +113,21 @@ namespace PathFind3D
             (0, 0, 1),
             (0, 0, -1)
         };
+
+        static Vector3i[] directions = new Vector3i[]
+        {
+            new Vector3i(1, 1, 1), new Vector3i(1, 1, 0), new Vector3i(1, 1, -1),
+            new Vector3i(1, 0, 1), new Vector3i(1, 0, 0), new Vector3i(1, 0, -1),
+            new Vector3i(1, -1, 1), new Vector3i(1, -1, 0), new Vector3i(1, -1, -1),
+            new Vector3i(0, 1, 1), new Vector3i(0, 1, 0), new Vector3i(0, 1, -1),
+            new Vector3i(0, 0, 1), new Vector3i(0, 0, -1),
+            new Vector3i(0, -1, 1), new Vector3i(0, -1, 0), new Vector3i(0, -1, -1),
+            new Vector3i(-1, 1, 1), new Vector3i(-1, 1, 0), new Vector3i(-1, 1, -1),
+            new Vector3i(-1, 0, 1), new Vector3i(-1, 0, 0), new Vector3i(-1, 0, -1),
+            new Vector3i(-1, -1, 1), new Vector3i(-1, -1, 0), new Vector3i(-1, -1, -1),
+        };
         #endregion
+
 
         #region matrices
 
@@ -162,7 +205,7 @@ namespace PathFind3D
                         };
 
                         // randomly set node as air or wall
-                        if (rng.NextDouble() >= nodeDensity)
+                        if (rng.NextDouble() >= obstacleDensity)
                             nd.DrawMD = DrawMode.Air;
                         else
                             nd.DrawMD = DrawMode.Wall;
@@ -192,14 +235,14 @@ namespace PathFind3D
                 .ToList();
 
             // draw opaque objects (walls)
-            foreach (var node in grid)
-            {
-                if (node != null)
-                {
-                    if (node.DrawMD == DrawMode.Wall && drawWalls)
-                        node.Draw(viewMatrix, projectionMatrix);
-                }
-            }
+            //  foreach (var node in grid)
+            //  {
+            //      if (node != null)
+            //      {
+            //          if (node.DrawMD == DrawMode.Wall && drawWalls)
+            //              node.Draw(viewMatrix, projectionMatrix);
+            //      }
+            //  }
 
             // draw transparent objects
             foreach (var node in sortedGrid)
@@ -230,25 +273,13 @@ namespace PathFind3D
         #endregion
 
         #region pathfinding
-
-        Vector3i[] directions = new Vector3i[]
-        {
-            new Vector3i(1, 1, 1), new Vector3i(1, 1, 0), new Vector3i(1, 1, -1),
-            new Vector3i(1, 0, 1), new Vector3i(1, 0, 0), new Vector3i(1, 0, -1),
-            new Vector3i(1, -1, 1), new Vector3i(1, -1, 0), new Vector3i(1, -1, -1),
-            new Vector3i(0, 1, 1), new Vector3i(0, 1, 0), new Vector3i(0, 1, -1),
-            new Vector3i(0, 0, 1), new Vector3i(0, 0, -1),
-            new Vector3i(0, -1, 1), new Vector3i(0, -1, 0), new Vector3i(0, -1, -1),
-            new Vector3i(-1, 1, 1), new Vector3i(-1, 1, 0), new Vector3i(-1, 1, -1),
-            new Vector3i(-1, 0, 1), new Vector3i(-1, 0, 0), new Vector3i(-1, 0, -1),
-            new Vector3i(-1, -1, 1), new Vector3i(-1, -1, 0), new Vector3i(-1, -1, -1),
-        };
+        Vector3i[] usedDirections = directions;
 
         #region BFS
         private void AddNeighborsToOpenSet(GraphNode currentNode)
         {
             Vector3i nodePos = currentNode.GridPosition;
-            foreach (var direction in mainDirections)
+            foreach (var direction in directions)
             {
                 Vector3i newNodePos = nodePos + direction;
 
@@ -502,6 +533,7 @@ namespace PathFind3D
             _isMouseOverMenu = false;
             mousePos = ImGui.GetMousePos();
             updateMousePos();
+            //  if (ImGui.Button("test deviation")) Console.WriteLine(avgDeviation(4, 8, 6, 5, 3, 7));
 
             // gui buttons for various actions
             if (ImGui.Button("Rebuild Grid"))
@@ -512,6 +544,11 @@ namespace PathFind3D
             if (ImGui.Button(drawWalls == true ? "Hide Walls" : "UnHide Walls"))
             {
                 drawWalls = !drawWalls;
+            }
+
+            if (ImGui.Button("change draw modes"))
+            {
+
             }
 
             if (ImGui.Button("Clear Path"))
@@ -568,11 +605,25 @@ namespace PathFind3D
                 ImGui.InputInt("Y  ", ref enY);
                 ImGui.InputInt("Z  ", ref enZ);
 
+                ImGui.Text("Obstacle Density");
+                ImGui.InputDouble(" ", ref obstacleDensity, 0.05);
+
                 if (ImGui.Button("Apply"))
                 {
                     gridSize = new(gsX, gsY, gsZ);
                     startNodePos = new(snX, snY, snZ);
                     endNodePos = new(enX, enY, enZ);
+
+                    snX = Math.Clamp(snX, 0, gsX);
+                    snY = Math.Clamp(snY, 0, gsY);
+                    snZ = Math.Clamp(snZ, 0, gsZ);
+
+                    enX = Math.Clamp(enX, 0, gsX);
+                    enY = Math.Clamp(enY, 0, gsY);
+                    enZ = Math.Clamp(enZ, 0, gsZ);
+
+                    obstacleDensity = Math.Clamp(obstacleDensity, 0, 1);
+
                     rebuildGrid();
                 }
             }
@@ -580,6 +631,33 @@ namespace PathFind3D
             ImGui.End();
         }
 
+        #endregion
+
+        #region Mesh
+        private int vbo, ebo, vao;
+
+        private void updateVBOs()
+        {
+            // Generate and bind the Vertex Array Object
+            GL.GenVertexArrays(1, out vao);
+            GL.BindVertexArray(vao);
+
+            // Generate and populate the Vertex Buffer Object
+            GL.GenBuffers(1, out vbo);
+            GL.BindBuffer(BufferTarget.ArrayBuffer, vbo);
+            GL.BufferData(BufferTarget.ArrayBuffer, meshData.vertices.Count * Vector3.SizeInBytes, meshData.vertices.ToArray(), BufferUsageHint.StaticDraw);
+
+            // Set up the vertex attributes
+            GL.EnableVertexAttribArray(0);
+            GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, Vector3.SizeInBytes, 0);
+
+            // Generate and populate the Element Buffer Object
+            GL.GenBuffers(1, out ebo);
+            GL.BindBuffer(BufferTarget.ElementArrayBuffer, ebo);
+            GL.BufferData(BufferTarget.ElementArrayBuffer, meshData.indices.Count * sizeof(int), meshData.indices.ToArray(), BufferUsageHint.StaticDraw);
+
+            GL.BindVertexArray(0);
+        }
         #endregion
 
         private void handleUserInput()
@@ -762,6 +840,8 @@ namespace PathFind3D
             _controller.PressChar((char)e.Unicode);
         }
 
+        private VoxelMesher mesher;
+        private (List<Vector3> vertices, List<int> indices, List<Vector3> normals) meshData;
         private void onUpdateFrame(FrameEventArgs e)
         {
             if (window == null)
@@ -774,7 +854,12 @@ namespace PathFind3D
             {
                 boxNode.Rotation = rot;
                 boxNode.AspectRatio = aspectRatio;
+
+                mesher = new(grid, gridSize);
+                meshData = mesher.GenerateMesh();
+                updateVBOs();
             }
+
 
             calculateFPS(e.Time);
             handleUserInput();
@@ -782,6 +867,7 @@ namespace PathFind3D
             runAction?.Invoke();
         }
 
+        bool chngDielectricAndConductor;
         private void onRenderFrame(FrameEventArgs args)
         {
             if (window == null || grid == null)
@@ -794,10 +880,13 @@ namespace PathFind3D
 
             GL.Enable(EnableCap.DepthTest);
 
-            drawGrid();
             boxNode?.Draw(viewMatrix, projectionMatrix);
 
             GL.Disable(EnableCap.DepthTest);
+
+            GL.BindVertexArray(vao);
+            GL.DrawElements(BeginMode.Triangles, meshData.indices.Count, DrawElementsType.UnsignedInt, 0);
+            GL.BindVertexArray(0);
 
             _controller.Update(window, (float)args.Time);
             ProcessGUI();

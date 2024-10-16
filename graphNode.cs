@@ -13,6 +13,7 @@ namespace PathFind3D
         public float AspectRatio { get; set; } = 1;
         public Vector3 Rotation { get; set; } = new Vector3(0, 0, 0);
         public Vector3 BaseSize = new Vector3(0.125f);
+        public NodeState State { get; set; } = NodeState.Dielectric;
         public DrawMode DrawMD { get; set; } = DrawMode.Wall;
 
         public float dstFromStart = float.MaxValue;
