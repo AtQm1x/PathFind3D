@@ -128,7 +128,6 @@ namespace PathFind3D
         };
         #endregion
 
-
         #region matrices
 
         private void SetupMatrices()
@@ -140,7 +139,7 @@ namespace PathFind3D
         }
         private void UpdateViewMatrix()
         {
-            // update view matrix based on camera position
+            // update view matrix based on camera GridPosition
             viewMatrix = Matrix4.LookAt(
                 cameraPosition,
                 (cameraPosition.X, cameraPosition.Y, cameraPosition.Z - 1),
@@ -197,11 +196,10 @@ namespace PathFind3D
                         float posX = i * nodeDistance - startOffset.X;
                         float posY = j * nodeDistance - startOffset.Y;
                         float posZ = k * nodeDistance - startOffset.Z;
-                        GraphNode nd = new(posX, posY, posZ)
+                        GraphNode nd = new((i, j, k))
                         {
                             Rotation = rot,
-                            AspectRatio = aspectRatio,
-                            GridPosition = (i, j, k)
+                            AspectRatio = aspectRatio
                         };
 
                         // randomly set node as air or wall
@@ -224,6 +222,7 @@ namespace PathFind3D
 
             grid = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
             grid = gridBuffer;
+            updateMesh = true;
         }
 
         private void drawGrid()
@@ -231,7 +230,7 @@ namespace PathFind3D
             // sort transparent objects for correct rendering
             var sortedGrid = grid.Cast<GraphNode>()
                 .Where(node => node?.DrawMD != DrawMode.Air && node?.DrawMD != DrawMode.Wall && node != null)
-                .OrderByDescending(node => Vector3.Distance(cameraPosition, new Vector3(node.Position.X, node.Position.X, node.Position.X)))
+                .OrderByDescending(node => Vector3.Distance(cameraPosition, new Vector3(node.GridPosition.X, node.GridPosition.X, node.GridPosition.X)))
                 .ToList();
 
             // draw opaque objects (walls)
@@ -283,7 +282,7 @@ namespace PathFind3D
             {
                 Vector3i newNodePos = nodePos + direction;
 
-                // check if new position is within grid bounds
+                // check if new GridPosition is within grid bounds
                 if (newNodePos.X < 0 || newNodePos.Y < 0 || newNodePos.Z < 0 ||
                     newNodePos.X >= gridSize.X || newNodePos.Y >= gridSize.Y || newNodePos.Z >= gridSize.Z)
                 {
@@ -383,7 +382,7 @@ namespace PathFind3D
             {
                 Vector3i newNodePos = currentNode.GridPosition + direction;
 
-                // check if new position is within grid bounds
+                // check if new GridPosition is within grid bounds
                 if (newNodePos.X < 0 || newNodePos.Y < 0 || newNodePos.Z < 0 ||
                     newNodePos.X >= gridSize.X || newNodePos.Y >= gridSize.Y || newNodePos.Z >= gridSize.Z)
                 {
@@ -633,8 +632,47 @@ namespace PathFind3D
 
         #endregion
 
+        #region shaders
+        private Shader shader;
+
+        private static string vertexShaderSource = @"
+            #version 330 core
+            layout (location = 0) in vec3 aPos;
+            layout (location = 1) in vec4 aColor;
+            
+            uniform mat4 model;
+            uniform mat4 view;
+            uniform mat4 projection;
+            
+            out vec4 vertexColor;
+            
+            void main()
+            {
+                gl_Position = projection * view * model * vec4(aPos, 1.0);
+                vertexColor = aColor;
+            }
+        ";
+
+        private static string fragmentShaderSource = @"
+            #version 330 core
+            in vec4 vertexColor;
+            out vec4 FragColor;
+            uniform vec4 cColor;
+            
+            void main()
+            {
+                if (cColor == vec4(0,0,0,0))
+                    FragColor = vertexColor;
+                    
+                else
+                    FragColor = cColor;
+            }
+        ";
+        #endregion
+
         #region Mesh
-        private int vbo, ebo, vao;
+        private int vbo, cbo, ebo, vao;
+        private (Vector3[] vertices, uint[] indices, Vector4[] colors) meshData;
 
         private void updateVBOs()
         {
@@ -642,19 +680,25 @@ namespace PathFind3D
             GL.GenVertexArrays(1, out vao);
             GL.BindVertexArray(vao);
 
-            // Generate and populate the Vertex Buffer Object
+            // Vertex buffer
             GL.GenBuffers(1, out vbo);
             GL.BindBuffer(BufferTarget.ArrayBuffer, vbo);
-            GL.BufferData(BufferTarget.ArrayBuffer, meshData.vertices.Count * Vector3.SizeInBytes, meshData.vertices.ToArray(), BufferUsageHint.StaticDraw);
-
-            // Set up the vertex attributes
+            GL.BufferData(BufferTarget.ArrayBuffer, meshData.vertices.Length * Vector3.SizeInBytes, meshData.vertices, BufferUsageHint.StaticDraw);
             GL.EnableVertexAttribArray(0);
             GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, Vector3.SizeInBytes, 0);
 
-            // Generate and populate the Element Buffer Object
+            // Color buffer
+            GL.GenBuffers(1, out cbo);
+            GL.BindBuffer(BufferTarget.ArrayBuffer, cbo);
+            GL.BindBuffer(BufferTarget.ArrayBuffer, cbo);
+            GL.BufferData(BufferTarget.ArrayBuffer, meshData.colors.Length * Vector4.SizeInBytes, meshData.colors, BufferUsageHint.StaticDraw);
+            GL.EnableVertexAttribArray(1);
+            GL.VertexAttribPointer(1, 4, VertexAttribPointerType.Float, false, Vector4.SizeInBytes, 0);
+
+            // Element buffer
             GL.GenBuffers(1, out ebo);
             GL.BindBuffer(BufferTarget.ElementArrayBuffer, ebo);
-            GL.BufferData(BufferTarget.ElementArrayBuffer, meshData.indices.Count * sizeof(int), meshData.indices.ToArray(), BufferUsageHint.StaticDraw);
+            GL.BufferData(BufferTarget.ElementArrayBuffer, meshData.indices.Length * sizeof(uint), meshData.indices, BufferUsageHint.StaticDraw);
 
             GL.BindVertexArray(0);
         }
@@ -762,6 +806,25 @@ namespace PathFind3D
 
         public void Shutdown()
         {
+            // Delete OpenGL objects
+            GL.DeleteBuffer(vbo);
+            GL.DeleteBuffer(cbo);
+            GL.DeleteBuffer(ebo);
+            GL.DeleteVertexArray(vao);
+
+            // Reset identifiers
+            vbo = cbo = ebo = vao = 0;
+
+            // Clear mesh data
+            if (meshData.vertices != null) meshData.vertices = new Vector3[] { new Vector3(0, 0, 0) };
+            if (meshData.indices != null) meshData.indices = new uint[] { 0 };
+            if (meshData.colors != null) meshData.colors = new Vector4[] { new Vector4(0) };
+
+            // Reset meshData
+            meshData = default;
+
+            GC.Collect();
+
             exit = true;
             continueSearch = false;
         }
@@ -816,6 +879,7 @@ namespace PathFind3D
             GL.FrontFace(FrontFaceDirection.Ccw);
 
             SetupMatrices();
+            shader = new Shader(vertexShaderSource, fragmentShaderSource);
 
             baseSize = new Vector3(gridSize.X, gridSize.Y, gridSize.Z) * 0.125f + (0.01f, 0.01f, 0.01f);
 
@@ -841,7 +905,7 @@ namespace PathFind3D
         }
 
         private VoxelMesher mesher;
-        private (List<Vector3> vertices, List<int> indices, List<Vector3> normals) meshData;
+        private bool updateMesh = true;
         private void onUpdateFrame(FrameEventArgs e)
         {
             if (window == null)
@@ -849,15 +913,22 @@ namespace PathFind3D
 
             updateGrid();
 
-            // update box if necessary
-            if ((boxNode?.Rotation != rot || boxNode?.AspectRatio != aspectRatio) && boxNode != null)
+            if (updateMesh)
             {
-                boxNode.Rotation = rot;
-                boxNode.AspectRatio = aspectRatio;
-
+                meshData = default;
+                updateMesh = false;
                 mesher = new(grid, gridSize);
                 meshData = mesher.GenerateMesh();
                 updateVBOs();
+            }
+            // update box if necessary
+            if ((boxNode?.Rotation != rot || boxNode?.AspectRatio != aspectRatio))
+            {
+                if (boxNode != null)
+                {
+                    boxNode.Rotation = rot;
+                    boxNode.AspectRatio = aspectRatio;
+                }
             }
 
 
@@ -875,18 +946,41 @@ namespace PathFind3D
 
             GL.ClearColor(0.2f, 0.3f, 0.4f, 1.0f);
             GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
-
-            GL.Viewport(0, 0, window.ClientSize.X, window.ClientSize.Y);
-
             GL.Enable(EnableCap.DepthTest);
+
+            shader.Use();
+
+            // Create rotation matrix
+            Matrix4 rotationX = Matrix4.CreateRotationX(rot.X);
+            Matrix4 rotationY = Matrix4.CreateRotationY(rot.Y);
+            Matrix4 rotationZ = Matrix4.CreateRotationZ(rot.Z);
+            Matrix4 rotation = rotationZ * rotationY * rotationX;
+
+            // Apply rotation to model matrix
+            Matrix4 model = rotation;
+
+            shader.SetMatrix4("model", model);
+            shader.SetMatrix4("view", viewMatrix);
+            shader.SetMatrix4("projection", projectionMatrix);
+            shader.SetVec4("cColor", (0, 0, 0, 0));
+
+            GL.BindVertexArray(vao);
+
+            // Draw filled cubes
+            GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Fill);
+            GL.DrawElements(PrimitiveType.Triangles, meshData.indices.Length, DrawElementsType.UnsignedInt, 0);
+
+            // Draw wireframe
+            GL.LineWidth(2.0f);
+            shader.SetVec4("cColor", (0, 0, 0, 1));
+            GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Line);
+            GL.DrawElements(PrimitiveType.Triangles, meshData.indices.Length, DrawElementsType.UnsignedInt, 0);
+
+            GL.BindVertexArray(0);
 
             boxNode?.Draw(viewMatrix, projectionMatrix);
 
             GL.Disable(EnableCap.DepthTest);
-
-            GL.BindVertexArray(vao);
-            GL.DrawElements(BeginMode.Triangles, meshData.indices.Count, DrawElementsType.UnsignedInt, 0);
-            GL.BindVertexArray(0);
 
             _controller.Update(window, (float)args.Time);
             ProcessGUI();

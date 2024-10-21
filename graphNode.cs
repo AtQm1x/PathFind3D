@@ -7,7 +7,6 @@ namespace PathFind3D
 {
     public class GraphNode
     {
-        public Vector3 Position { get; set; }
         public Vector3i GridPosition { get; set; }
         public GraphNode? Parent { get; set; } = null;
         public float AspectRatio { get; set; } = 1;
@@ -23,8 +22,7 @@ namespace PathFind3D
 
         private static readonly Vector4 ColorWhite = new Vector4(1, 1, 1, 1);
 
-
-        int[] cubeIndices =
+        private static int[] cubeIndices =
         {
         0, 1, 2,
         2, 1, 3,
@@ -38,9 +36,9 @@ namespace PathFind3D
         3, 7, 5,
         6, 0, 4,
         4, 0, 2
-    };
+        };
 
-        float[] cubeVertices = new float[8 * 3];
+        private static float[] cubeVertices = new float[8 * 3];
 
         int[] lineIndices =
         {
@@ -58,28 +56,27 @@ namespace PathFind3D
         6, 0, 0, 2, 2, 4, 4, 6
     };
 
-        public GraphNode(Vector3 position)
+        public GraphNode(Vector3i GridPosition)
         {
-            Position = position;
+            this.GridPosition = GridPosition;
             InitializeCubeVertices();
         }
 
-        public GraphNode(float x, float y, float z)
+        public GraphNode()
         {
-            Position = new Vector3(x, y, z);
             InitializeCubeVertices();
         }
 
-        public GraphNode(Vector3 position, DrawMode drawMode)
+        public GraphNode(Vector3i GridPosition, DrawMode drawMode)
         {
-            Position = position;
+            this.GridPosition = GridPosition;
             DrawMD = drawMode;
             InitializeCubeVertices();
         }
 
         public float DistanceTo(GraphNode other)
         {
-            return (other.Position - Position).Length;
+            return (other.GridPosition - GridPosition).EuclideanLength;
         }
 
         private void InitializeCubeVertices()
@@ -135,7 +132,7 @@ namespace PathFind3D
             }
 
             Matrix4 rotationMatrix = CreateRotationMatrix(Rotation);
-            Matrix4 modelMatrix = Matrix4.CreateTranslation(Position) * rotationMatrix;
+            Matrix4 modelMatrix = Matrix4.CreateTranslation(GridPosition) * rotationMatrix;
             Matrix4 mvpMatrix = modelMatrix * viewMatrix * projectionMatrix;
 
             GL.MatrixMode(MatrixMode.Modelview);
