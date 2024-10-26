@@ -54,7 +54,7 @@ public class VoxelMesher
             {
                 for (int z = 0; z < gridSize.Z; z++)
                 {
-                    if (grid != null && grid[x, y, z].DrawMD == DrawMode.Wall)
+                    if (grid != null && grid[x, y, z] != null && grid[x, y, z].DrawMD == DrawMode.Wall)
                     {
                         AddCube(new Vector3(x, y, z) * CUBE_SCALE + offset, vertices, indices, colors, ref vertexCount, ref indexCount, grid[x, y, z]);
                     }

@@ -7,11 +7,14 @@ namespace PathFind3D
 {
     public class GraphNode
     {
+        public Vector3 Position { get; set; }
         public Vector3i GridPosition { get; set; }
         public GraphNode? Parent { get; set; } = null;
         public float AspectRatio { get; set; } = 1;
         public Vector3 Rotation { get; set; } = new Vector3(0, 0, 0);
         public Vector3 BaseSize = new Vector3(0.125f);
+
+        public bool canGenerate = true;
         public NodeState State { get; set; } = NodeState.Dielectric;
         public DrawMode DrawMD { get; set; } = DrawMode.Wall;
 
@@ -55,10 +58,21 @@ namespace PathFind3D
         // Sixth Quad
         6, 0, 0, 2, 2, 4, 4, 6
     };
+        public GraphNode(Vector3 position)
+        {
+            Position = position;
+            InitializeCubeVertices();
+        }
+        public GraphNode(float x, float y, float z)
+        {
+            Position = new Vector3(x, y, z);
+            InitializeCubeVertices();
+        }
 
         public GraphNode(Vector3i GridPosition)
         {
             this.GridPosition = GridPosition;
+            this.Position = (Vector3)GridPosition * 0.125f;
             InitializeCubeVertices();
         }
 
@@ -71,12 +85,13 @@ namespace PathFind3D
         {
             this.GridPosition = GridPosition;
             DrawMD = drawMode;
+            this.Position = (Vector3)GridPosition * 0.125f;
             InitializeCubeVertices();
         }
 
         public float DistanceTo(GraphNode other)
         {
-            return (other.GridPosition - GridPosition).EuclideanLength;
+            return (other.Position - Position).Length;
         }
 
         private void InitializeCubeVertices()
@@ -132,7 +147,7 @@ namespace PathFind3D
             }
 
             Matrix4 rotationMatrix = CreateRotationMatrix(Rotation);
-            Matrix4 modelMatrix = Matrix4.CreateTranslation(GridPosition) * rotationMatrix;
+            Matrix4 modelMatrix = Matrix4.CreateTranslation(Position) * rotationMatrix;
             Matrix4 mvpMatrix = modelMatrix * viewMatrix * projectionMatrix;
 
             GL.MatrixMode(MatrixMode.Modelview);

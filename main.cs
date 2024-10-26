@@ -56,6 +56,19 @@ namespace PathFind3D
             this.resY = resY;
             this.title = title;
         }
+        #region operators
+
+        public static bool V3iLessThan(Vector3i v1, Vector3i v2)
+        {
+            return (v1.X < v2.X) && (v1.Y < v2.Y) && (v1.Z < v2.Z);
+        }
+
+        public static bool V3iGreaterThan(Vector3i v1, Vector3i v2)
+        {
+            return v1.X > v2.X && v1.Y > v2.Y && v1.Z > v2.Z;
+        }
+
+        #endregion
 
         #region global variables
 
@@ -74,12 +87,12 @@ namespace PathFind3D
         private static Vector3i endNodePos = (gridSize.X, gridSize.Y, gridSize.Z);
 
         private bool exit = false;
-        private Matrix4 projectionMatrix;
-        private Matrix4 viewMatrix;
+        private static Matrix4 projectionMatrix;
+        private static Matrix4 viewMatrix;
         private static float zoom = gridSize.X / 4;
         private Vector3 cameraPosition = new Vector3(0, 0, zoom);
         private GraphNode[,,] grid = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
-        private Vector3 rot = new(0);
+        private static Vector3 rot = new(0);
 
         private double obstacleDensity = 0.2;
 
@@ -87,7 +100,7 @@ namespace PathFind3D
         private List<GraphNode> openSet = new();
         private SortedSet<GraphNode> openSetSorted = new();
         private List<GraphNode> closedSet = new();
-        private GraphNode? boxNode;
+        private GraphNode boxNode;
         private Vector3 baseSize;
         private bool drawWalls = true;
 
@@ -169,6 +182,8 @@ namespace PathFind3D
             continueSearch = true;
         }
 
+        int oRadius = 5;
+        int oSpacing = 5;
         private void runRebuildGridThread(ref GraphNode[,,] grid)
         {
             // create a box node to represent the entire grid
@@ -193,20 +208,70 @@ namespace PathFind3D
                 {
                     for (int k = 0; k < gridSize.Z; k++)
                     {
-                        float posX = i * nodeDistance - startOffset.X;
-                        float posY = j * nodeDistance - startOffset.Y;
-                        float posZ = k * nodeDistance - startOffset.Z;
+
                         GraphNode nd = new((i, j, k))
                         {
                             Rotation = rot,
-                            AspectRatio = aspectRatio
+                            AspectRatio = aspectRatio,
+                            canGenerate = true
                         };
 
-                        // randomly set node as air or wall
-                        if (rng.NextDouble() >= obstacleDensity)
-                            nd.DrawMD = DrawMode.Air;
-                        else
-                            nd.DrawMD = DrawMode.Wall;
+                        if (gridBuffer[i, j, k] == null)
+                        {
+                            gridBuffer[i, j, k] = nd;
+                        }
+
+                        if (gridBuffer[i, j, k].canGenerate == true)
+                        {
+                            // randomly set node as air or wall
+                            if (rng.NextDouble() >= obstacleDensity)
+                            {
+                                gridBuffer[i, j, k].DrawMD = DrawMode.Air;
+                                gridBuffer[i, j, k].State = NodeState.Conductor;
+                                gridBuffer[i, j, k].canGenerate = true;
+                            }
+                            else
+                            {
+                                // sphere generation
+                                Console.WriteLine($"trying to generate a sphere at {(i, j, k)}");
+                                Parallel.For(-(oRadius + oSpacing), oRadius + oSpacing, (int ii) =>
+                                {
+                                    for (int jj = -(oRadius + oSpacing); jj < oRadius + oSpacing; jj++)
+                                    {
+                                        for (int kk = -(oRadius + oSpacing); kk < oRadius + oSpacing; kk++)
+                                        {
+                                            float len = new Vector3i(ii, jj, kk).EuclideanLength;
+                                            Vector3i oPos = (i + ii, j + jj, k + kk);
+                                            bool isInGrid = V3iGreaterThan(oPos, -Vector3i.One) && V3iLessThan(oPos, gridSize);
+
+                                            if (len <= oRadius && isInGrid)
+                                            {
+                                                //if (gridBuffer[oPos.X, oPos.Y, oPos.Z] != null && gridBuffer[oPos.X, oPos.Y, oPos.Z].State == NodeState.Conductor)
+                                                gridBuffer[oPos.X, oPos.Y, oPos.Z] = new GraphNode(oPos)
+                                                {
+                                                    DrawMD = DrawMode.Wall,
+                                                    State = NodeState.Dielectric,
+                                                    Rotation = rot,
+                                                    AspectRatio = aspectRatio,
+                                                    canGenerate = false
+                                                };
+                                            }
+                                            else if (len <= oRadius * 2 + oSpacing && isInGrid)
+                                            {
+                                                gridBuffer[oPos.X, oPos.Y, oPos.Z] = new GraphNode(oPos)
+                                                {
+                                                    DrawMD = DrawMode.Air,
+                                                    State = NodeState.Conductor,
+                                                    Rotation = rot,
+                                                    AspectRatio = aspectRatio,
+                                                    canGenerate = false
+                                                };
+                                            }
+                                        }
+                                    }
+                                });
+                            }
+                        }
 
                         // set start and end nodes
                         if (i == startNodePos.X && j == startNodePos.Y && k == startNodePos.Z)
@@ -214,11 +279,10 @@ namespace PathFind3D
 
                         if (i == endNodePos.X - 1 && j == endNodePos.Y - 1 && k == endNodePos.Z - 1)
                             nd.DrawMD = DrawMode.End;
-
-                        gridBuffer[i, j, k] = nd;
                     };
                 };
             };
+
 
             grid = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
             grid = gridBuffer;
@@ -228,20 +292,22 @@ namespace PathFind3D
         private void drawGrid()
         {
             // sort transparent objects for correct rendering
+
+            GL.UseProgram(shader.Handle);
             var sortedGrid = grid.Cast<GraphNode>()
                 .Where(node => node?.DrawMD != DrawMode.Air && node?.DrawMD != DrawMode.Wall && node != null)
-                .OrderByDescending(node => Vector3.Distance(cameraPosition, new Vector3(node.GridPosition.X, node.GridPosition.X, node.GridPosition.X)))
+                .OrderByDescending(node => Vector3.Distance(cameraPosition, new Vector3(node.Position.X, node.Position.X, node.Position.X)))
                 .ToList();
 
             // draw opaque objects (walls)
-            //  foreach (var node in grid)
-            //  {
-            //      if (node != null)
-            //      {
-            //          if (node.DrawMD == DrawMode.Wall && drawWalls)
-            //              node.Draw(viewMatrix, projectionMatrix);
-            //      }
-            //  }
+            foreach (var node in grid)
+            {
+                if (node != null)
+                {
+                    if (node.DrawMD == DrawMode.Wall && drawWalls)
+                        node.Draw(viewMatrix, projectionMatrix);
+                }
+            }
 
             // draw transparent objects
             foreach (var node in sortedGrid)
@@ -557,14 +623,17 @@ namespace PathFind3D
 
             if (ImGui.Button("run BFS"))
             {
-                grid[startNodePos.X, startNodePos.Y, startNodePos.Z].DrawMD = DrawMode.Start;
-                grid[endNodePos.X - 1, endNodePos.Y - 1, endNodePos.Z - 1].DrawMD = DrawMode.End;
-                BFSThread = new Thread(() =>
+                if (grid[startNodePos.X, startNodePos.Y, startNodePos.Z] != null && grid[endNodePos.X - 1, endNodePos.Y - 1, endNodePos.Z - 1] != null)
                 {
-                    BreadthFirstSearch(grid[startNodePos.X, startNodePos.Y, startNodePos.Z]);
-                });
+                    grid[startNodePos.X, startNodePos.Y, startNodePos.Z].DrawMD = DrawMode.Start;
+                    grid[endNodePos.X - 1, endNodePos.Y - 1, endNodePos.Z - 1].DrawMD = DrawMode.End;
+                    BFSThread = new Thread(() =>
+                    {
+                        BreadthFirstSearch(grid[startNodePos.X, startNodePos.Y, startNodePos.Z]);
+                    });
 
-                BFSThread.Start();
+                    BFSThread.Start();
+                }
             }
 
             if (ImGui.Button("run A*"))
@@ -607,6 +676,10 @@ namespace PathFind3D
                 ImGui.Text("Obstacle Density");
                 ImGui.InputDouble(" ", ref obstacleDensity, 0.05);
 
+                ImGui.Text("Dielectric Particle size");
+                ImGui.InputInt("Radius", ref oRadius);
+                ImGui.InputInt("Minimal spacing", ref oSpacing);
+
                 if (ImGui.Button("Apply"))
                 {
                     gridSize = new(gsX, gsY, gsZ);
@@ -633,7 +706,7 @@ namespace PathFind3D
         #endregion
 
         #region shaders
-        private Shader shader;
+        private static Shader shader;
 
         private static string vertexShaderSource = @"
             #version 330 core
@@ -671,8 +744,8 @@ namespace PathFind3D
         #endregion
 
         #region Mesh
-        private int vbo, cbo, ebo, vao;
-        private (Vector3[] vertices, uint[] indices, Vector4[] colors) meshData;
+        private static int vbo, cbo, ebo, vao;
+        private static (Vector3[] vertices, uint[] indices, Vector4[] colors) meshData;
 
         private void updateVBOs()
         {
@@ -939,14 +1012,10 @@ namespace PathFind3D
         }
 
         bool chngDielectricAndConductor;
-        private void onRenderFrame(FrameEventArgs args)
+        private static void useMeshRender()
         {
-            if (window == null || grid == null)
-                return;
-
-            GL.ClearColor(0.2f, 0.3f, 0.4f, 1.0f);
-            GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
             GL.Enable(EnableCap.DepthTest);
+            GL.Enable(EnableCap.CullFace);
 
             shader.Use();
 
@@ -978,9 +1047,20 @@ namespace PathFind3D
 
             GL.BindVertexArray(0);
 
-            boxNode?.Draw(viewMatrix, projectionMatrix);
-
             GL.Disable(EnableCap.DepthTest);
+            GL.Disable(EnableCap.CullFace);
+
+        }
+        private void onRenderFrame(FrameEventArgs args)
+        {
+            if (window == null || grid == null)
+                return;
+
+            GL.ClearColor(0.2f, 0.3f, 0.4f, 1.0f);
+            GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+            GL.Viewport(0, 0, window.ClientSize.X, window.ClientSize.Y);
+
+            drawGrid();
 
             _controller.Update(window, (float)args.Time);
             ProcessGUI();
