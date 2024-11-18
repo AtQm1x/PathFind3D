@@ -22,14 +22,14 @@ public class VoxelMesher
         };
 
     uint[] cubeIndices = new uint[]
-    {
+        {
             0, 1, 2, 2, 3, 0, // Front
             1, 5, 6, 6, 2, 1, // Right
             5, 4, 7, 7, 6, 5, // Back
             4, 0, 3, 3, 7, 4, // Left
             3, 2, 6, 6, 7, 3, // Top
             4, 5, 1, 1, 0, 4  // Bottom
-    };
+        };
 
     public VoxelMesher(GraphNode[,,] grid, Vector3i gridSize)
     {
@@ -38,7 +38,7 @@ public class VoxelMesher
         this.offset = -(Vector3)gridSize / 2 * CUBE_SCALE;
     }
 
-    public (Vector3[] vertices, uint[] indices, Vector4[] colors) GenerateMesh()
+    public (Vector3[] vertices, uint[] indices, Vector4[] colors) GenerateMesh(params DrawMode[] desiredDrawModes)
     {
         int maxCubes = gridSize.X * gridSize.Y * gridSize.Z;
         Vector3[] vertices = new Vector3[maxCubes * 8];
@@ -54,19 +54,16 @@ public class VoxelMesher
             {
                 for (int z = 0; z < gridSize.Z; z++)
                 {
-                    if (grid != null && grid[x, y, z] != null && grid[x, y, z].DrawMD == DrawMode.Wall)
+                    foreach (var mode in desiredDrawModes)
                     {
-                        AddCube(new Vector3(x, y, z) * CUBE_SCALE + offset, vertices, indices, colors, ref vertexCount, ref indexCount, grid[x, y, z]);
+                        if (grid != null && grid[x, y, z] != null && grid[x, y, z].DrawMD == mode)
+                        {
+                            AddCube(new Vector3(x, y, z) * CUBE_SCALE + offset, vertices, indices, colors, ref vertexCount, ref indexCount, grid[x, y, z]);
+                        }
                     }
                 }
             }
         }
-
-        // Trim arrays to actual size
-        //Array.Resize(ref vertices, vertexCount);
-        //Array.Resize(ref colors, vertexCount);
-        //Array.Resize(ref indices, indexCount);
-
         return (vertices, indices, colors);
     }
 
@@ -88,6 +85,18 @@ public class VoxelMesher
 
                 case DrawMode.End:
                     colors[vertexCount] = new Vector4(1, 0, 0, 1);
+                    break;
+
+                case DrawMode.Path:
+                    colors[vertexCount] = new Vector4(0, 0, 1, 0.25f);
+                    break;
+
+                case DrawMode.Open:
+                    colors[vertexCount] = new Vector4(1, 1, 0, 0.25f);
+                    break;
+
+                case DrawMode.Closed:
+                    colors[vertexCount] = new Vector4(1, 0, 1, 0.25f);
                     break;
             }
             vertexCount++;

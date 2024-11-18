@@ -25,60 +25,41 @@ namespace PathFind3D
 
         private static readonly Vector4 ColorWhite = new Vector4(1, 1, 1, 1);
 
-        private static int[] cubeIndices =
+        Vector3[] cubeVertices = new Vector3[]
         {
-        0, 1, 2,
-        2, 1, 3,
-        2, 3, 4,
-        4, 3, 5,
-        4, 5, 6,
-        6, 5, 7,
-        6, 7, 0,
-        0, 7, 1,
-        1, 7, 3,
-        3, 7, 5,
-        6, 0, 4,
-        4, 0, 2
+            new Vector3(-0.5f, -0.5f, -0.5f),
+            new Vector3( 0.5f, -0.5f, -0.5f),
+            new Vector3( 0.5f,  0.5f, -0.5f),
+            new Vector3(-0.5f,  0.5f, -0.5f),
+            new Vector3(-0.5f, -0.5f,  0.5f),
+            new Vector3( 0.5f, -0.5f,  0.5f),
+            new Vector3( 0.5f,  0.5f,  0.5f),
+            new Vector3(-0.5f,  0.5f,  0.5f)
         };
 
-        private static float[] cubeVertices = new float[8 * 3];
-
-        int[] lineIndices =
+        uint[] cubeIndices = new uint[]
         {
-        // First Quad
-        0, 1, 1, 3, 3, 2, 2, 0,
-        // Second Quad
-        2, 3, 3, 5, 5, 4, 4, 2,
-        // Third Quad
-        4, 5, 5, 7, 7, 6, 6, 4,
-        // Fourth Quad
-        6, 7, 7, 1, 1, 0, 0, 6,
-        // Fifth Quad
-        1, 7, 7, 5, 5, 3, 3, 1,
-        // Sixth Quad
-        6, 0, 0, 2, 2, 4, 4, 6
-    };
+            0, 1, 2, 2, 3, 0, // Front
+            1, 5, 6, 6, 2, 1, // Right
+            5, 4, 7, 7, 6, 5, // Back
+            4, 0, 3, 3, 7, 4, // Left
+            3, 2, 6, 6, 7, 3, // Top
+            4, 5, 1, 1, 0, 4  // Bottom
+        };
+
         public GraphNode(Vector3 position)
         {
             Position = position;
-            InitializeCubeVertices();
         }
         public GraphNode(float x, float y, float z)
         {
             Position = new Vector3(x, y, z);
-            InitializeCubeVertices();
         }
 
         public GraphNode(Vector3i GridPosition)
         {
             this.GridPosition = GridPosition;
             this.Position = (Vector3)GridPosition * 0.125f;
-            InitializeCubeVertices();
-        }
-
-        public GraphNode()
-        {
-            InitializeCubeVertices();
         }
 
         public GraphNode(Vector3i GridPosition, DrawMode drawMode)
@@ -86,27 +67,11 @@ namespace PathFind3D
             this.GridPosition = GridPosition;
             DrawMD = drawMode;
             this.Position = (Vector3)GridPosition * 0.125f;
-            InitializeCubeVertices();
         }
 
         public float DistanceTo(GraphNode other)
         {
             return (other.Position - Position).Length;
-        }
-
-        private void InitializeCubeVertices()
-        {
-            cubeVertices = new float[]
-        {
-            -0.500000f * BaseSize.X, -0.500000f * BaseSize.Y, 0.500000f * BaseSize.Z,
-            0.500000f * BaseSize.X, -0.500000f * BaseSize.Y, 0.500000f * BaseSize.Z,
-            -0.500000f * BaseSize.X, 0.500000f * BaseSize.Y, 0.500000f * BaseSize.Z,
-            0.500000f * BaseSize.X, 0.500000f * BaseSize.Y, 0.500000f * BaseSize.Z,
-            -0.500000f * BaseSize.X, 0.500000f * BaseSize.Y, -0.500000f * BaseSize.Z,
-            0.500000f * BaseSize.X, 0.500000f * BaseSize.Y, -0.500000f * BaseSize.Z,
-            -0.500000f * BaseSize.X, -0.500000f * BaseSize.Y, -0.500000f * BaseSize.Z,
-            0.500000f * BaseSize.X, -0.500000f * BaseSize.Y, -0.500000f * BaseSize.Z
-        };
         }
 
         private Matrix4 CreateRotationMatrix(Vector3 rotation)
@@ -117,87 +82,89 @@ namespace PathFind3D
             return rotMatZ * rotMatY * rotMatX;
         }
 
-        private void drawWireframe()
-        {
-            // Draw wireframe overlay
-            GL.Color4(0.0f, 0.0f, 0.0f, 1.0f);
-            GL.PolygonMode(MaterialFace.Front, PolygonMode.Line);
-            GL.VertexPointer(3, VertexPointerType.Float, 0, cubeVertices);
-            GL.DrawElements(PrimitiveType.Lines, lineIndices.Length, DrawElementsType.UnsignedInt, lineIndices);
-        }
-
-        private void fillCube(Vector4 color)
-        {
-            // Draw filled polygons
-            GL.Color4(color);
-            GL.PolygonMode(MaterialFace.Front, PolygonMode.Fill);
-            GL.VertexPointer(3, VertexPointerType.Float, 0, cubeVertices);
-            GL.DrawElements(PrimitiveType.Triangles, cubeIndices.Length, DrawElementsType.UnsignedInt, cubeIndices);
-        }
-
-        public void Draw(Matrix4 viewMatrix, Matrix4 projectionMatrix)
+        public void Draw(Matrix4 viewMatrix, Matrix4 projectionMatrix, Shader shader, int indexCount, int vao)
         {
             if (DrawMD == DrawMode.Air)
                 return;
 
-            // Ensure cube vertices are initialized once
-            if (cubeVertices[0] != -0.500000f * BaseSize.X)
-            {
-                InitializeCubeVertices();
-            }
-
+            // Create model matrix using position and rotation for this node
             Matrix4 rotationMatrix = CreateRotationMatrix(Rotation);
             Matrix4 modelMatrix = Matrix4.CreateTranslation(Position) * rotationMatrix;
-            Matrix4 mvpMatrix = modelMatrix * viewMatrix * projectionMatrix;
 
-            GL.MatrixMode(MatrixMode.Modelview);
-            GL.LoadMatrix(ref mvpMatrix);
+            // Activate shader and set transformation matrices
+            shader.Use();
+            shader.SetMatrix4("model", modelMatrix);
+            shader.SetMatrix4("view", viewMatrix);
+            shader.SetMatrix4("projection", projectionMatrix);
 
+            // Enable OpenGL states
+            GL.Enable(EnableCap.DepthTest);
             GL.Enable(EnableCap.CullFace);
             GL.CullFace(CullFaceMode.Back);
             GL.FrontFace(FrontFaceDirection.Ccw);
 
-            GL.EnableClientState(ArrayCap.VertexArray);
+            GL.BindVertexArray(vao);  // Use the VAO passed as a parameter
 
+            // Render based on the current Draw Mode (DrawMD)
             switch (DrawMD)
             {
-
                 case DrawMode.Wireframe:
-                    drawWireframe();
+                    RenderWireframe(shader, new Vector4(0, 0, 0, 1), indexCount);
                     break;
 
                 case DrawMode.Wall:
-                    fillCube(ColorWhite);
-                    drawWireframe();
+                    RenderFilled(shader, ColorWhite, indexCount);
+                    RenderWireframe(shader, new Vector4(0, 0, 0, 1), indexCount);
                     break;
 
                 case DrawMode.Start:
-                    fillCube((0, 1, 0, 1));
-                    drawWireframe();
+                    RenderFilled(shader, new Vector4(0, 1, 0, 1), indexCount);
+                    RenderWireframe(shader, new Vector4(0, 0, 0, 1), indexCount);
                     break;
 
                 case DrawMode.End:
-                    fillCube((1, 0, 0, 1));
-                    drawWireframe();
+                    RenderFilled(shader, new Vector4(1, 0, 0, 1), indexCount);
+                    RenderWireframe(shader, new Vector4(0, 0, 0, 1), indexCount);
                     break;
 
                 case DrawMode.Open:
-                    fillCube((1, 0.8470588235f, 0, 0.1f));
-                    drawWireframe();
+                    RenderFilled(shader, new Vector4(1, 0.847f, 0, 0.1f), indexCount);
+                    RenderWireframe(shader, new Vector4(0, 0, 0, 1), indexCount);
                     break;
 
                 case DrawMode.Path:
-                    fillCube((0, 1, 1, 0.25f));
-                    drawWireframe();
+                    RenderFilled(shader, new Vector4(0, 1, 1, 0.25f), indexCount);
+                    RenderWireframe(shader, new Vector4(0, 0, 0, 1), indexCount);
                     break;
 
                 case DrawMode.Closed:
-                    // fillCube(new Vector4(1f, 1f, 0.1f, 0.2f));
+                    // Uncomment if needed
+                    // RenderFilled(shader, new Vector4(1f, 1f, 0.1f, 0.2f), indexCount);
                     break;
             }
 
-            GL.DisableClientState(ArrayCap.VertexArray);
+            GL.BindVertexArray(0);
+
+            GL.Disable(EnableCap.DepthTest);
             GL.Disable(EnableCap.CullFace);
         }
+
+        // Helper method for rendering filled shapes
+        private void RenderFilled(Shader shader, Vector4 color, int indexCount)
+        {
+            shader.SetVec4("cColor", color);
+            GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Fill);
+            GL.DrawElements(PrimitiveType.Triangles, indexCount, DrawElementsType.UnsignedInt, IntPtr.Zero);
+        }
+
+        // Helper method for rendering wireframe shapes
+        private void RenderWireframe(Shader shader, Vector4 color, int indexCount)
+        {
+            shader.SetVec4("cColor", color);
+            GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Line);
+            GL.LineWidth(2.0f);
+            GL.DrawElements(PrimitiveType.Triangles, indexCount, DrawElementsType.UnsignedInt, IntPtr.Zero);
+        }
+
     }
 }
