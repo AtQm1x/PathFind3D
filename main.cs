@@ -7,6 +7,7 @@ using OpenTK.Windowing.GraphicsLibraryFramework;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using NVector2 = System.Numerics.Vector2;
@@ -312,35 +313,35 @@ namespace PathFind3D
 
 
             // set start and end nodes
-            for (int ii = -criteria; ii < criteria; ii++)
-            {
-                for (int jj = -criteria; jj < criteria; jj++)
-                {
-                    for (int kk = -criteria; kk < criteria; kk++)
-                    {
-                        if (ii == 0 && jj == 0 && kk == 0) continue;
-                        float len = new Vector3i(ii, jj, kk).EuclideanLength;
-                        Vector3i oPosStart = (startNodePos.X + ii, startNodePos.Y + jj, startNodePos.Z + kk);
-                        Vector3i oPosEnd = (endNodePos.X + ii, endNodePos.Y + jj, endNodePos.Z + kk);
-
-                        bool isInGridStart = V3iGreaterThan(oPosStart, -Vector3i.One) && V3iLessThan(oPosStart, gridSize);
-                        bool isInGridEnd = V3iGreaterThan(oPosEnd, -Vector3i.One) && V3iLessThan(oPosEnd, gridSize);
-
-                        if (isInGridStart && len < oRadius + oSpacing)
-                        {
-                            gridBuffer[oPosStart.X, oPosStart.Y, oPosStart.Z].DrawMD = DrawMode.Wall;
-                            gridBuffer[oPosStart.X, oPosStart.Y, oPosStart.Z].State = NodeState.Conductor;
-                            gridBuffer[oPosStart.X, oPosStart.Y, oPosStart.Z].canGenerate = false;
-                        }
-                        if (isInGridEnd && len < oRadius + oSpacing)
-                        {
-                            gridBuffer[oPosEnd.X, oPosEnd.Y, oPosEnd.Z].DrawMD = DrawMode.Wall;
-                            gridBuffer[oPosEnd.X, oPosEnd.Y, oPosEnd.Z].State = NodeState.Conductor;
-                            gridBuffer[oPosEnd.X, oPosEnd.Y, oPosEnd.Z].canGenerate = false;
-                        }
-                    }
-                }
-            }
+            //for (int ii = -criteria; ii < criteria; ii++)
+            //{
+            //    for (int jj = -criteria; jj < criteria; jj++)
+            //    {
+            //        for (int kk = -criteria; kk < criteria; kk++)
+            //        {
+            //            if (ii == 0 && jj == 0 && kk == 0) continue;
+            //            float len = new Vector3i(ii, jj, kk).EuclideanLength;
+            //            Vector3i oPosStart = (startNodePos.X + ii, startNodePos.Y + jj, startNodePos.Z + kk);
+            //            Vector3i oPosEnd = (endNodePos.X + ii, endNodePos.Y + jj, endNodePos.Z + kk);
+            //
+            //            bool isInGridStart = V3iGreaterThan(oPosStart, -Vector3i.One) && V3iLessThan(oPosStart, gridSize);
+            //            bool isInGridEnd = V3iGreaterThan(oPosEnd, -Vector3i.One) && V3iLessThan(oPosEnd, gridSize);
+            //
+            //            if (isInGridStart && len < oRadius + oSpacing)
+            //            {
+            //                gridBuffer[oPosStart.X, oPosStart.Y, oPosStart.Z].DrawMD = DrawMode.Wall;
+            //                gridBuffer[oPosStart.X, oPosStart.Y, oPosStart.Z].State = NodeState.Conductor;
+            //                gridBuffer[oPosStart.X, oPosStart.Y, oPosStart.Z].canGenerate = false;
+            //            }
+            //            if (isInGridEnd && len < oRadius + oSpacing)
+            //            {
+            //                gridBuffer[oPosEnd.X, oPosEnd.Y, oPosEnd.Z].DrawMD = DrawMode.Wall;
+            //                gridBuffer[oPosEnd.X, oPosEnd.Y, oPosEnd.Z].State = NodeState.Conductor;
+            //                gridBuffer[oPosEnd.X, oPosEnd.Y, oPosEnd.Z].canGenerate = false;
+            //            }
+            //        }
+            //    }
+            //}
 
             gridBuffer[startNodePos.X, startNodePos.Y, startNodePos.Z].State = NodeState.Start;
             gridBuffer[startNodePos.X, startNodePos.Y, startNodePos.Z].DrawMD = DrawMode.Start;
@@ -509,7 +510,7 @@ namespace PathFind3D
                     continueSearch = false;
                     openSet.Clear();
                     closedSet.Clear();
-                    Console.WriteLine("PathFound");
+                    logger.WriteLine("PathFound");
                     grid[startNodePos.X, startNodePos.Y, startNodePos.Z].Parent = null;
                     BacktrackPath(neighbor);
 
@@ -569,7 +570,7 @@ namespace PathFind3D
 
             stopwatch.Stop();
             TimeSpan elapsedTime = stopwatch.Elapsed;
-            Console.WriteLine($"BreadthFirstSearch execution time: {elapsedTime.TotalMilliseconds} ms");
+            logger.WriteLine($"BreadthFirstSearch execution time: {elapsedTime.TotalMilliseconds} ms");
             updateMesh = true;
             updateVBOs();
         }
@@ -645,7 +646,7 @@ namespace PathFind3D
                 // check if we've reached the end node
                 if (currentNode.State == NodeState.End)
                 {
-                    Console.WriteLine("Path found!");
+                    logger.WriteLine("Path found!");
                     BacktrackPath(currentNode);
                     break;
                 }
@@ -667,12 +668,12 @@ namespace PathFind3D
             // no path found
             if (openSet.Count == 0)
             {
-                Console.WriteLine("No path found");
+                logger.WriteLine("No path found");
             }
 
             stopwatch.Stop();
             TimeSpan elapsedTime = stopwatch.Elapsed;
-            Console.WriteLine($"A* execution time: {elapsedTime.TotalMilliseconds} ms");
+            logger.WriteLine($"A* execution time: {elapsedTime.TotalMilliseconds} ms");
 
             updateMesh = true;
         }
@@ -700,7 +701,7 @@ namespace PathFind3D
                     item.DrawMD = DrawMode.Air;
                 }
             }
-            Console.WriteLine($"Path length: {endNode.dstFromStart - 1}");
+            logger.WriteLine($"Path length: {endNode.dstFromStart - 1}");
             updateGrid();
         }
 
@@ -732,12 +733,14 @@ namespace PathFind3D
 
             ImGui.Begin("Control");
             ImGui.SetWindowFontScale(1.2f);
+
             _isMouseOverMenu = false;
             mousePos = ImGui.GetMousePos();
             updateMousePos();
+
             if (ImGui.Button("test deviation"))
             {
-                Console.WriteLine(avgDispersion(grid));
+                logger.WriteLine(avgDispersion(grid));
             }
 
             // gui buttons for various actions
@@ -846,6 +849,24 @@ namespace PathFind3D
                 }
             }
 
+            ImGui.Begin("Program Log");
+            updateMousePos();
+
+            try
+            {
+                using (var stream = new FileStream(_LogFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                using (var reader = new StreamReader(stream))
+                {
+                    fileContent = reader.ReadToEnd();
+                }
+            }
+            catch (IOException ex)
+            {
+                fileContent = "Error reading log file: " + ex.Message;
+            }
+
+            ImGui.InputTextMultiline("Program Log", ref fileContent, (uint)fileContent.Length + 1, new NVector2(-1, -1), ImGuiInputTextFlags.ReadOnly);
+
             ImGui.End();
         }
 
@@ -937,6 +958,26 @@ namespace PathFind3D
         }
         #endregion
 
+        #region log File
+
+        public const string _LogFilePath = "programLog.txt";
+        FileLogger logger = new FileLogger(_LogFilePath);
+        string fileContent = string.Empty;
+
+        private void fileINIT()
+        {
+            if (File.Exists(_LogFilePath))
+            {
+                File.WriteAllText(_LogFilePath, string.Empty);
+            }
+            else
+            {
+                File.Create(_LogFilePath).Close();
+            }
+            fileContent = File.ReadAllText(_LogFilePath);
+        }
+
+        #endregion
         private void handleUserInput()
         {
             if (window == null)
@@ -1042,24 +1083,20 @@ namespace PathFind3D
         {
             for (int i = 0; i < _bufferCount; i++)
             {
-                // Delete OpenGL objects
                 GL.DeleteBuffer(vbo[i]);
                 GL.DeleteBuffer(cbo[i]);
                 GL.DeleteBuffer(ebo[i]);
                 GL.DeleteVertexArray(vao[i]);
 
-                // Reset identifiers
                 vbo[i] = cbo[i] = ebo[i] = vao[i] = 0;
 
-                // Clear mesh data
                 if (meshData[i].vertices != null) meshData[i].vertices = new Vector3[] { new Vector3(0, 0, 0) };
                 if (meshData[i].indices != null) meshData[i].indices = new uint[] { 0 };
                 if (meshData[i].colors != null) meshData[i].colors = new Vector4[] { new Vector4(0) };
 
-                // Reset meshData
                 meshData[i] = default;
             }
-
+            logger.Stop();
             GC.Collect();
 
             exit = true;
@@ -1125,6 +1162,7 @@ namespace PathFind3D
             usedDirections = directions;
             //usedDirections = mainDirections;
 
+            fileINIT();
             var io = ImGui.GetIO();
             io.ConfigFlags |= ImGuiConfigFlags.DockingEnable;
             io.ConfigFlags |= ImGuiConfigFlags.ViewportsEnable;
@@ -1298,11 +1336,14 @@ namespace PathFind3D
 
         private void onMouseWheel(MouseWheelEventArgs e)
         {
-            // zoom
-            zoom -= e.OffsetY * 0.2f;
-            zoom = Math.Max(0.1f, Math.Min(zoom, 1000.0f));
-            cameraPosition.Z = zoom;
-            UpdateViewMatrix();
+            if (!_isMouseOverMenu)
+            {
+                // zoom
+                zoom -= e.OffsetY * 0.2f;
+                zoom = Math.Max(0.1f, Math.Min(zoom, 1000.0f));
+                cameraPosition.Z = zoom;
+                UpdateViewMatrix();
+            }
             _controller.MouseScroll(e.Offset);
         }
 
