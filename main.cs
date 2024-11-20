@@ -21,14 +21,13 @@ namespace PathFind3D
     public class main
     {
         /*
-         * 1. доля частинок провідника в першій провідній жилі в мометн виникання та довжина цієї жили
-         * 2. дисперсія кількості в жилі
-         * 3. дисперсія електро провідності
-         *
-         *  діелектрик <> провідник
-         *  поперечний розмір жили
-         *  електропровідність ділянок
-         *  монодисперсія
+         *  XY   доля частинок провідника в першій провідній жилі в мометн виникання та довжина цієї жили
+         *  X    дисперсія кількості в жилі
+         *  X    дисперсія електро провідності
+         *  Y   діелектрик <> провідник 
+         *  X   поперечний розмір жили 
+         *  X   електропровідність ділянок 
+         *  X   монодисперсія 
          */
 
         // не ураховувати на гранях
@@ -619,6 +618,7 @@ namespace PathFind3D
                 }
             }
         }
+
         public bool AStar(Vector3i startPos, Vector3i endPos, bool updateGrid = true, bool logToFile = true)
         {
             Stopwatch stopwatch = new Stopwatch();
@@ -652,7 +652,7 @@ namespace PathFind3D
                 lock (grid)
                 {
                     // update node color for visualization
-                    if (currentNode.GridPosition != startPos && currentNode.GridPosition != endPos)
+                    if (currentNode.GridPosition != startPos && (currentNode.GridPosition != endPos || currentNode.DrawMD != DrawMode.End))
                     {
                         currentNode.DrawMD = DrawMode.Closed;
                     }
@@ -696,7 +696,7 @@ namespace PathFind3D
                     item.DrawMD = DrawMode.Air;
                 }
             }
-            logger.WriteLine($"Path length: {endNode.dstFromStart - 1}");
+            logger.WriteLine($"Path length: {MathF.Round(endNode.gScore, 3) - 1}");
             updateGrid();
         }
 
@@ -1013,10 +1013,14 @@ namespace PathFind3D
             {
                 for (int j = 0; j < gridSize.Y; j++)
                 {
+                    if (grid[i, j, 0].State != NodeState.Conductor)
+                        continue;
                     for (int k = 0; k < gridSize.X; k++)
                     {
                         for (int l = 0; l < gridSize.Y; l++)
                         {
+                            if (grid[k, l, gridSize.Z - 1].State != NodeState.Conductor)
+                                continue;
                             if (AStar((i, j, 0), (k, l, gridSize.Z - 1), false, false))
                             {
                                 pathFound = true;
@@ -1077,9 +1081,11 @@ namespace PathFind3D
             {
                 grid[startNodePos.X, startNodePos.Y, startNodePos.Z].DrawMD = DrawMode.Start;
                 grid[endNodePos.X - 1, endNodePos.Y - 1, endNodePos.Z - 1].DrawMD = DrawMode.End;
+                Vector3i newstartNodePos = new Vector3i(Math.Clamp(startNodePos.X, 0, gridSize.X - 1), Math.Clamp(startNodePos.Y, 0, gridSize.Y - 1), Math.Clamp(startNodePos.Z, 0, gridSize.Z - 1));
+                Vector3i newendNodePos = new Vector3i(Math.Clamp(endNodePos.X, 0, gridSize.X - 1), Math.Clamp(endNodePos.Y, 0, gridSize.Y - 1), Math.Clamp(endNodePos.Z, 0, gridSize.Z - 1));
                 AStarThread = new Thread(() =>
                 {
-                    AStar(startNodePos, endNodePos);
+                    AStar(newstartNodePos, newendNodePos);
                 });
 
                 AStarThread.Start();
