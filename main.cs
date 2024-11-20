@@ -20,7 +20,8 @@ namespace PathFind3D
 
     public class main
     {
-        /* 1. доля частинок провідника в першій провідній жилі в мометн виникання та довжина цієї жили
+        /*
+         * 1. доля частинок провідника в першій провідній жилі в мометн виникання та довжина цієї жили
          * 2. дисперсія кількості в жилі
          * 3. дисперсія електро провідності
          *
@@ -28,11 +29,6 @@ namespace PathFind3D
          *  поперечний розмір жили
          *  електропровідність ділянок
          *  монодисперсія
-         *  
-         *  
-         *  
-         *  
-         *  
          */
 
         // не ураховувати на гранях
@@ -221,7 +217,7 @@ namespace PathFind3D
         }
 
         static int oRadius = 3;
-        static int oSpacing = 3;
+        static int oSpacing = 1;
         int criteria = oRadius + oSpacing + 1;
         private void runRebuildGridThread(ref GraphNode[,,] grid)
         {
@@ -503,7 +499,7 @@ namespace PathFind3D
                     neighbor.dstFromStart = currentNode.dstFromStart + 1;
                 }
 
-                // check if end node reached
+                // check if end node is reached
                 if (neighbor.State == NodeState.End)
                 {
                     neighbor.Parent = currentNode;
@@ -598,13 +594,13 @@ namespace PathFind3D
                     continue;
                 }
 
-                float tentativeGScore = currentNode.gScore + direction.EuclideanLength;
+                float GScore = currentNode.gScore + direction.EuclideanLength;
 
                 // update node if better path found
-                if (!openSet.UnorderedItems.Any(x => x.Element == neighbor) || tentativeGScore < neighbor.gScore)
+                if (!openSet.UnorderedItems.Any(x => x.Element == neighbor) || GScore < neighbor.gScore)
                 {
                     neighbor.Parent = currentNode;
-                    neighbor.gScore = tentativeGScore;
+                    neighbor.gScore = GScore;
                     neighbor.hScore = (neighbor.GridPosition - endNodePos).EuclideanLengthSquared;
                     neighbor.fScore = neighbor.gScore + neighbor.hScore;
 
@@ -623,7 +619,7 @@ namespace PathFind3D
                 }
             }
         }
-        public void AStar(Vector3i startNodePos, Vector3i endNodePos)
+        public bool AStar(Vector3i startPos, Vector3i endPos, bool updateGrid = true, bool logToFile = true)
         {
             Stopwatch stopwatch = new Stopwatch();
             stopwatch.Start();
@@ -631,11 +627,11 @@ namespace PathFind3D
             PriorityQueue<GraphNode, float> openSet = new PriorityQueue<GraphNode, float>();
             HashSet<GraphNode> closedSet = new HashSet<GraphNode>();
 
-            GraphNode startNode = grid[startNodePos.X, startNodePos.Y, startNodePos.Z];
+            GraphNode startNode = grid[startPos.X, startPos.Y, startPos.Z];
 
             // initialize start node
             startNode.gScore = 0;
-            startNode.hScore = (startNodePos - endNodePos).EuclideanLengthSquared;
+            startNode.hScore = (startPos - endPos).EuclideanLengthSquared;
             startNode.fScore = startNode.hScore;
             openSet.Enqueue(startNode, startNode.fScore);
 
@@ -643,10 +639,10 @@ namespace PathFind3D
             {
                 GraphNode currentNode = openSet.Dequeue();
 
-                // check if we've reached the end node
-                if (currentNode.State == NodeState.End)
+                // check if reached the end node
+                if (currentNode.GridPosition == endPos)
                 {
-                    logger.WriteLine("Path found!");
+                    if (logToFile) logger.WriteLine("Path found!");
                     BacktrackPath(currentNode);
                     break;
                 }
@@ -656,26 +652,25 @@ namespace PathFind3D
                 lock (grid)
                 {
                     // update node color for visualization
-                    if (currentNode.State != NodeState.Start && currentNode.State != NodeState.End)
+                    if (currentNode.GridPosition != startPos && currentNode.GridPosition != endPos)
                     {
                         currentNode.DrawMD = DrawMode.Closed;
                     }
 
-                    AddNeighborsToOpenSortedSet(currentNode, endNodePos, openSet, closedSet);
+                    AddNeighborsToOpenSortedSet(currentNode, endPos, openSet, closedSet);
                 }
             }
 
             // no path found
+            TimeSpan elapsedTime = stopwatch.Elapsed;
+            stopwatch.Stop();
             if (openSet.Count == 0)
             {
-                logger.WriteLine("No path found");
+                return false;
             }
-
-            stopwatch.Stop();
-            TimeSpan elapsedTime = stopwatch.Elapsed;
-            logger.WriteLine($"A* execution time: {elapsedTime.TotalMilliseconds} ms");
-
-            updateMesh = true;
+            if (logToFile) logger.WriteLine($"A* execution time: {elapsedTime.TotalMilliseconds} ms");
+            updateMesh = updateGrid;
+            return true;
         }
         #endregion
 
@@ -727,6 +722,7 @@ namespace PathFind3D
 
         int gsX = gridSize.X, gsY = gridSize.Y, gsZ = gridSize.Z, snX = startNodePos.X, snY = startNodePos.Y, snZ = startNodePos.Z, enX = endNodePos.X, enY = endNodePos.Y, enZ = endNodePos.Z;
 
+        Thread testThread;
         private void ProcessGUI()
         {
             ImGui.DockSpaceOverViewport(ImGui.GetMainViewport().ID, ImGui.GetMainViewport(), ImGuiDockNodeFlags.PassthruCentralNode);
@@ -749,10 +745,15 @@ namespace PathFind3D
                 rebuildGrid();
             }
 
-            //if (ImGui.Button("Rebuild Grid SIMPLE"))
-            //{
-            //rebuildGrid_SIMPLE();
-            //}
+            if (ImGui.Button("test can go through"))
+            {
+                testThread = new Thread(() =>
+                {
+                    logger.WriteLine(percolationThreshold());
+                });
+
+                testThread.Start();
+            }
 
             if (ImGui.Button(drawWalls == true ? "Hide Walls" : "UnHide Walls"))
             {
@@ -866,7 +867,6 @@ namespace PathFind3D
             }
 
             ImGui.InputTextMultiline("Program Log", ref fileContent, (uint)fileContent.Length + 1, new NVector2(-1, -1), ImGuiInputTextFlags.ReadOnly);
-
             ImGui.End();
         }
 
@@ -923,7 +923,32 @@ namespace PathFind3D
         private static
             (Vector3[] vertices, uint[] indices, Vector4[] colors)[] meshData
                 = new (Vector3[] vertices, uint[] indices, Vector4[] colors)[_bufferCount];
+        private void DisposeMeshData()
+        {
+            for (int i = 0; i < _bufferCount; i++)
+            {
+                if (meshData[i].vertices != null)
+                {
+                    Array.Clear(meshData[i].vertices, 0, meshData[i].vertices.Length);
+                    meshData[i].vertices = null;
+                }
 
+                if (meshData[i].indices != null)
+                {
+                    Array.Clear(meshData[i].indices, 0, meshData[i].indices.Length);
+                    meshData[i].indices = null;
+                }
+
+                if (meshData[i].colors != null)
+                {
+                    Array.Clear(meshData[i].colors, 0, meshData[i].colors.Length);
+                    meshData[i].colors = null;
+                }
+
+                // Reset the struct to its default values
+                meshData[i] = default;
+            }
+        }
 
         private void updateVBOs()
         {
@@ -975,6 +1000,36 @@ namespace PathFind3D
                 File.Create(_LogFilePath).Close();
             }
             fileContent = File.ReadAllText(_LogFilePath);
+        }
+
+        #endregion
+
+        #region fizykaaaaaaaaaaaaa
+
+        private double percolationThreshold()
+        {
+            bool pathFound = false;
+            for (int i = 0; i < gridSize.X; i++)
+            {
+                for (int j = 0; j < gridSize.Y; j++)
+                {
+                    for (int k = 0; k < gridSize.X; k++)
+                    {
+                        for (int l = 0; l < gridSize.Y; l++)
+                        {
+                            if (AStar((i, j, 0), (k, l, gridSize.Z - 1), false, false))
+                            {
+                                pathFound = true;
+                                goto exitLoop;
+                            }
+                            clearPath(false);
+                        }
+                    }
+                }
+            }
+        exitLoop:
+            updateMesh = true;
+            return pathFound ? 1 : 0;
         }
 
         #endregion
@@ -1055,7 +1110,7 @@ namespace PathFind3D
             }
         }
 
-        private void clearPath()
+        private void clearPath(bool doUpdateGrid = true)
         {
 
             // reset search state
@@ -1075,7 +1130,7 @@ namespace PathFind3D
                 node.Parent = null;
                 node.dstFromStart = 0;
             }
-            updateMesh = true;
+            updateMesh = doUpdateGrid;
             continueSearch = true;
         }
 
@@ -1225,16 +1280,15 @@ namespace PathFind3D
                 }
 
                 mesher = new(grid, gridSize);
-                for (int i = 0; i < _bufferCount; i++)
-                {
-                    meshData[i] = default;
-                }
+                DisposeMeshData();
                 meshData[0] = mesher.GenerateMesh(DrawMode.Wall);
                 meshData[1] = mesher.GenerateMesh(DrawMode.Start, DrawMode.End);
                 meshData[2] = mesher.GenerateMesh(DrawMode.Path, DrawMode.Open, DrawMode.Closed);
                 updateVBOs();
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
             }
-            // update box if necessary
+            // update box if necessary //// what box
             if ((boxNode?.Rotation != rot || boxNode?.AspectRatio != aspectRatio))
             {
                 if (boxNode != null)
