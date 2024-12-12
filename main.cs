@@ -30,7 +30,32 @@ namespace PathFind3D
          *  X   монодисперсія 
          */
 
-        // не ураховувати на гранях
+        /*
+            ПРЕЗЕНТАЦІЯ
+            Титульна Сторінка на якій буде тема
+            1)Актуальність 2)Мета
+            Основні задачі
+            засоби розв'язування задач
+
+            {
+            Технологія визначення довжини шляху
+            Технологія визначення кількості частинок в ньому
+            
+            кількість відгалужень
+
+            дисперсія і середнє значення кількості частинок в тупіках
+
+            відношення середнього до загальної кількості частинок
+            }
+        */
+
+
+
+        //  кількість частинок у тупіках
+
+
+
+        //  не ураховувати на гранях
 
         double avgDispersion(GraphNode[,,] vals)
         {
@@ -63,6 +88,32 @@ namespace PathFind3D
                 }
             }
             return Math.Round(1 - Math.Sqrt(sum2 / vals.Length), 10);
+        }
+
+        double fractionOfParticlesInPath()
+        {
+            int total = gridSize.X * gridSize.Y * gridSize.Z;
+            int countOfPathNodes = 0;
+            foreach (var item in grid)
+            {
+                if (item.DrawMD == DrawMode.Path)
+                    countOfPathNodes++;
+            }
+            return (double)countOfPathNodes / total;
+        }
+        // визначити вплив відношення розмірів частинки провідника і всього виробу на можливість застосування теорії перколяції
+        double conductorConcentration()
+        {
+            int tcount = gridSize.X * gridSize.Y * gridSize.Z;
+            int count = 0;
+            foreach (var item in grid)
+            {
+                if (item.State == NodeState.Conductor)
+                {
+                    count++;
+                }
+            }
+            return count / tcount;
         }
 
         public main(int resX, int resY, string title)
@@ -98,9 +149,9 @@ namespace PathFind3D
         private float nodeDistance = 0.125f;
         private Random rng = new(DateTime.Now.Millisecond * DateTime.Now.Second);
 
-        private static Vector3i gridSize = new(32, 16, 32);
-        private static Vector3i startNodePos = (0, 0, 0);
-        private static Vector3i endNodePos = (gridSize.X, gridSize.Y, gridSize.Z);
+        private static Vector3i gridSize = (32, 1, 32);
+        private static Vector3i startNodePos = (gridSize.X / 2, gridSize.Y / 2, 0);
+        private static Vector3i endNodePos = (gridSize.X / 2, gridSize.Y / 2, gridSize.Z);
 
         private bool exit = false;
         private static Matrix4 projectionMatrix;
@@ -308,40 +359,42 @@ namespace PathFind3D
 
 
             // set start and end nodes
-            //for (int ii = -criteria; ii < criteria; ii++)
-            //{
-            //    for (int jj = -criteria; jj < criteria; jj++)
-            //    {
-            //        for (int kk = -criteria; kk < criteria; kk++)
-            //        {
-            //            if (ii == 0 && jj == 0 && kk == 0) continue;
-            //            float len = new Vector3i(ii, jj, kk).EuclideanLength;
-            //            Vector3i oPosStart = (startNodePos.X + ii, startNodePos.Y + jj, startNodePos.Z + kk);
-            //            Vector3i oPosEnd = (endNodePos.X + ii, endNodePos.Y + jj, endNodePos.Z + kk);
-            //
-            //            bool isInGridStart = V3iGreaterThan(oPosStart, -Vector3i.One) && V3iLessThan(oPosStart, gridSize);
-            //            bool isInGridEnd = V3iGreaterThan(oPosEnd, -Vector3i.One) && V3iLessThan(oPosEnd, gridSize);
-            //
-            //            if (isInGridStart && len < oRadius + oSpacing)
-            //            {
-            //                gridBuffer[oPosStart.X, oPosStart.Y, oPosStart.Z].DrawMD = DrawMode.Wall;
-            //                gridBuffer[oPosStart.X, oPosStart.Y, oPosStart.Z].State = NodeState.Conductor;
-            //                gridBuffer[oPosStart.X, oPosStart.Y, oPosStart.Z].canGenerate = false;
-            //            }
-            //            if (isInGridEnd && len < oRadius + oSpacing)
-            //            {
-            //                gridBuffer[oPosEnd.X, oPosEnd.Y, oPosEnd.Z].DrawMD = DrawMode.Wall;
-            //                gridBuffer[oPosEnd.X, oPosEnd.Y, oPosEnd.Z].State = NodeState.Conductor;
-            //                gridBuffer[oPosEnd.X, oPosEnd.Y, oPosEnd.Z].canGenerate = false;
-            //            }
-            //        }
-            //    }
-            //}
+            for (int ii = -criteria; ii < criteria; ii++)
+            {
+                for (int jj = -criteria; jj < criteria; jj++)
+                {
+                    for (int kk = -criteria; kk < criteria; kk++)
+                    {
+                        //if (ii == 0 && jj == 0 && kk == 0) continue;
+                        float len = new Vector3i(ii, jj, kk).EuclideanLength;
+                        Vector3i oPosStart = (startNodePos.X + ii, startNodePos.Y + jj, startNodePos.Z + kk);
+                        Vector3i oPosEnd = (endNodePos.X + ii, endNodePos.Y + jj, endNodePos.Z + kk);
+
+                        bool isInGridStart = V3iGreaterThan(oPosStart, -Vector3i.One) && V3iLessThan(oPosStart, gridSize);
+                        bool isInGridEnd = V3iGreaterThan(oPosEnd, -Vector3i.One) && V3iLessThan(oPosEnd, gridSize);
+
+                        if (isInGridStart && len < oRadius)
+                        {
+                            gridBuffer[oPosStart.X, oPosStart.Y, oPosStart.Z].DrawMD = DrawMode.Wall;
+                            gridBuffer[oPosStart.X, oPosStart.Y, oPosStart.Z].State = NodeState.Conductor;
+                            gridBuffer[oPosStart.X, oPosStart.Y, oPosStart.Z].canGenerate = false;
+                        }
+                        if (isInGridEnd && len < oRadius)
+                        {
+                            gridBuffer[oPosEnd.X, oPosEnd.Y, oPosEnd.Z].DrawMD = DrawMode.Wall;
+                            gridBuffer[oPosEnd.X, oPosEnd.Y, oPosEnd.Z].State = NodeState.Conductor;
+                            gridBuffer[oPosEnd.X, oPosEnd.Y, oPosEnd.Z].canGenerate = false;
+                        }
+                    }
+                }
+            }
+            startNodePos = new Vector3i(Math.Clamp(startNodePos.X, 0, gridSize.X - 1), Math.Clamp(startNodePos.Y, 0, gridSize.Y - 1), Math.Clamp(startNodePos.Z, 0, gridSize.Z - 1));
+            endNodePos = new Vector3i(Math.Clamp(endNodePos.X, 0, gridSize.X - 1), Math.Clamp(endNodePos.Y, 0, gridSize.Y - 1), Math.Clamp(endNodePos.Z, 0, gridSize.Z - 1));
 
             gridBuffer[startNodePos.X, startNodePos.Y, startNodePos.Z].State = NodeState.Start;
             gridBuffer[startNodePos.X, startNodePos.Y, startNodePos.Z].DrawMD = DrawMode.Start;
-            gridBuffer[endNodePos.X - 1, endNodePos.Y - 1, endNodePos.Z - 1].State = NodeState.End;
-            gridBuffer[endNodePos.X - 1, endNodePos.Y - 1, endNodePos.Z - 1].DrawMD = DrawMode.End;
+            gridBuffer[endNodePos.X, endNodePos.Y, endNodePos.Z].State = NodeState.End;
+            gridBuffer[endNodePos.X, endNodePos.Y, endNodePos.Z].DrawMD = DrawMode.End;
             grid = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
             grid = gridBuffer;
             updateMesh = true;
@@ -467,12 +520,12 @@ namespace PathFind3D
 
         #region pathfinding
 
-        Vector3i[] usedDirections;
+        Vector3i[] usedDirections = mainDirections;
         #region BFS
         private void AddNeighborsToOpenSet(GraphNode currentNode)
         {
             Vector3i nodePos = currentNode.GridPosition;
-            foreach (var direction in directions)
+            foreach (var direction in usedDirections)
             {
                 Vector3i newNodePos = nodePos + direction;
 
@@ -574,13 +627,12 @@ namespace PathFind3D
         #region A*
         private void AddNeighborsToOpenSortedSet(GraphNode currentNode, Vector3i endNodePos, PriorityQueue<GraphNode, float> openSet, HashSet<GraphNode> closedSet)
         {
-            foreach (Vector3i direction in directions)
+            foreach (Vector3i direction in usedDirections)
             {
                 Vector3i newNodePos = currentNode.GridPosition + direction;
 
                 // check if new GridPosition is within grid bounds
-                if (newNodePos.X < 0 || newNodePos.Y < 0 || newNodePos.Z < 0 ||
-                    newNodePos.X >= gridSize.X || newNodePos.Y >= gridSize.Y || newNodePos.Z >= gridSize.Z)
+                if (!(V3iGreaterThan(newNodePos, -Vector3i.One) && V3iLessThan(newNodePos, gridSize)))
                 {
                     continue;
                 }
@@ -656,7 +708,6 @@ namespace PathFind3D
                     {
                         currentNode.DrawMD = DrawMode.Closed;
                     }
-
                     AddNeighborsToOpenSortedSet(currentNode, endPos, openSet, closedSet);
                 }
             }
@@ -790,9 +841,11 @@ namespace PathFind3D
             {
                 grid[startNodePos.X, startNodePos.Y, startNodePos.Z].DrawMD = DrawMode.Start;
                 grid[endNodePos.X - 1, endNodePos.Y - 1, endNodePos.Z - 1].DrawMD = DrawMode.End;
+                Vector3i newstartNodePos = new Vector3i(Math.Clamp(startNodePos.X, 0, gridSize.X - 1), Math.Clamp(startNodePos.Y, 0, gridSize.Y - 1), Math.Clamp(startNodePos.Z, 0, gridSize.Z - 1));
+                Vector3i newendNodePos = new Vector3i(Math.Clamp(endNodePos.X, 0, gridSize.X - 1), Math.Clamp(endNodePos.Y, 0, gridSize.Y - 1), Math.Clamp(endNodePos.Z, 0, gridSize.Z - 1));
                 AStarThread = new Thread(() =>
                 {
-                    AStar(startNodePos, endNodePos);
+                    AStar(newstartNodePos, newendNodePos);
                 });
 
                 AStarThread.Start();
@@ -836,13 +889,8 @@ namespace PathFind3D
                     startNodePos = new(snX, snY, snZ);
                     endNodePos = new(enX, enY, enZ);
 
-                    snX = Math.Clamp(snX, 0, gsX);
-                    snY = Math.Clamp(snY, 0, gsY);
-                    snZ = Math.Clamp(snZ, 0, gsZ);
-
-                    enX = Math.Clamp(enX, 0, gsX);
-                    enY = Math.Clamp(enY, 0, gsY);
-                    enZ = Math.Clamp(enZ, 0, gsZ);
+                    startNodePos = (Math.Clamp(startNodePos.X, 0, gridSize.X - 1), Math.Clamp(startNodePos.Y, 0, gridSize.Y - 1), Math.Clamp(startNodePos.Z, 0, gridSize.Z - 1));
+                    endNodePos = (Math.Clamp(endNodePos.X, 0, gridSize.X - 1), Math.Clamp(endNodePos.Y, 0, gridSize.Y - 1), Math.Clamp(endNodePos.Z, 0, gridSize.Z - 1));
 
                     obstacleDensity = Math.Clamp(obstacleDensity, 0, 1);
 
@@ -1057,32 +1105,24 @@ namespace PathFind3D
 
             if (window.KeyboardState.IsKeyPressed(Keys.F))
             {
-                if (BFSPath.Count > 0)
+                Vector3i newstartNodePos = new Vector3i(Math.Clamp(startNodePos.X, 0, gridSize.X - 1), Math.Clamp(startNodePos.Y, 0, gridSize.Y - 1), Math.Clamp(startNodePos.Z, 0, gridSize.Z - 1));
+                Vector3i newendNodePos = new Vector3i(Math.Clamp(endNodePos.X, 0, gridSize.X - 1), Math.Clamp(endNodePos.Y, 0, gridSize.Y - 1), Math.Clamp(endNodePos.Z, 0, gridSize.Z - 1));
+                grid[newstartNodePos.X, newstartNodePos.Y, newstartNodePos.Z].DrawMD = DrawMode.Start;
+                grid[newendNodePos.X, newendNodePos.Y, newendNodePos.Z].DrawMD = DrawMode.End;
+                BFSThread = new Thread(() =>
                 {
-                    foreach (GraphNode pathNode in BFSPath)
-                    {
-                        pathNode.Draw(viewMatrix, projectionMatrix, shader, 36, vao[1]);
-                    }
-                }
-                else
-                {
-                    grid[startNodePos.X, startNodePos.Y, startNodePos.Z].DrawMD = DrawMode.Start;
-                    grid[endNodePos.X - 1, endNodePos.Y - 1, endNodePos.Z - 1].DrawMD = DrawMode.End;
-                    BFSThread = new Thread(() =>
-                    {
-                        BreadthFirstSearch(grid[startNodePos.X, startNodePos.Y, startNodePos.Z]);
-                    });
+                    BreadthFirstSearch(grid[newstartNodePos.X, newstartNodePos.Y, newstartNodePos.Z]);
+                });
 
-                    BFSThread.Start();
-                }
+                BFSThread.Start();
             }
 
             if (window.KeyboardState.IsKeyPressed(Keys.G))
             {
-                grid[startNodePos.X, startNodePos.Y, startNodePos.Z].DrawMD = DrawMode.Start;
-                grid[endNodePos.X - 1, endNodePos.Y - 1, endNodePos.Z - 1].DrawMD = DrawMode.End;
                 Vector3i newstartNodePos = new Vector3i(Math.Clamp(startNodePos.X, 0, gridSize.X - 1), Math.Clamp(startNodePos.Y, 0, gridSize.Y - 1), Math.Clamp(startNodePos.Z, 0, gridSize.Z - 1));
                 Vector3i newendNodePos = new Vector3i(Math.Clamp(endNodePos.X, 0, gridSize.X - 1), Math.Clamp(endNodePos.Y, 0, gridSize.Y - 1), Math.Clamp(endNodePos.Z, 0, gridSize.Z - 1));
+                grid[newstartNodePos.X, newstartNodePos.Y, newstartNodePos.Z].DrawMD = DrawMode.Start;
+                grid[newendNodePos.X, newendNodePos.Y, newendNodePos.Z].DrawMD = DrawMode.End;
                 AStarThread = new Thread(() =>
                 {
                     AStar(newstartNodePos, newendNodePos);
@@ -1220,7 +1260,6 @@ namespace PathFind3D
 
             _controller = new ImGuiController(window.ClientSize.X, window.ClientSize.Y);
 
-            usedDirections = directions;
             //usedDirections = mainDirections;
 
             fileINIT();

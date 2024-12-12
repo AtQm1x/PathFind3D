@@ -36,7 +36,7 @@ namespace PathFind3D
             if (success == 0)
             {
                 string infoLog = GL.GetShaderInfoLog(shader);
-                Console.WriteLine($"Error compiling shader of type {type}: {infoLog}");
+                Console.WriteLine($"error compiling shader of type {type}: {infoLog}");
             }
 
             return shader;
@@ -50,7 +50,7 @@ namespace PathFind3D
             if (success == 0)
             {
                 string infoLog = GL.GetProgramInfoLog(program);
-                Console.WriteLine($"Error linking shader program: {infoLog}");
+                Console.WriteLine($"shader linker error: {infoLog}");
             }
         }
 
@@ -103,7 +103,5 @@ namespace PathFind3D
             int location = GL.GetUniformLocation(Handle, name);
             GL.Uniform4(location, vec.X, vec.Y, vec.Z, vec.W);
         }
-
-        // Add more methods for setting other uniform types as needed
     }
 }

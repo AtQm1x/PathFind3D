@@ -6,7 +6,7 @@ public class VoxelMesher
 {
     private readonly GraphNode[,,] grid;
     private readonly Vector3i gridSize;
-    private const float CUBE_SCALE = 0.125f; // 1/8 of original size
+    private const float CUBE_SCALE = 0.125f;
     private readonly Vector3 offset;
 
     Vector3[] cubeVertices = new Vector3[]
