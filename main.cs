@@ -143,12 +143,12 @@ namespace PathFind3D
 
         public static bool V3iLessThan(Vector3i v1, Vector3i v2)
         {
-            return (v1.X < v2.X) && (v1.Y < v2.Y) && (v1.Z < v2.Z);
+            return (v1.X < v2.X) || (v1.Y < v2.Y) || (v1.Z < v2.Z);
         }
 
         public static bool V3iGreaterThan(Vector3i v1, Vector3i v2)
         {
-            return v1.X > v2.X && v1.Y > v2.Y && v1.Z > v2.Z;
+            return v1.X > v2.X || v1.Y > v2.Y || v1.Z > v2.Z;
         }
 
         #endregion
@@ -471,19 +471,20 @@ namespace PathFind3D
                                 gridBuffer[i, j, k].canGenerate = true;
                             }
                         }
-
-                        // set start and end nodes
-                        startNodePos = V3IClampToGrid(startNodePos);
-                        endNodePos = V3IClampToGrid(endNodePos);
-                        if (i == startNodePos.X && j == startNodePos.Y && k == startNodePos.Z)
-                            nd.DrawMD = DrawMode.Start;
-
-                        if (i == endNodePos.X && j == endNodePos.Y && k == endNodePos.Z)
-                            nd.DrawMD = DrawMode.End;
                     };
                 };
             };
 
+
+            // set start and end nodes
+            startNodePos = V3IClampToGrid(startNodePos);
+            endNodePos = V3IClampToGrid(endNodePos);
+
+            gridBuffer[startNodePos.X, startNodePos.Y, startNodePos.Z].DrawMD = DrawMode.Start;
+            gridBuffer[startNodePos.X, startNodePos.Y, startNodePos.Z].State = NodeState.Start;
+
+            gridBuffer[endNodePos.X, endNodePos.Y, endNodePos.Z].DrawMD = DrawMode.End;
+            gridBuffer[endNodePos.X, endNodePos.Y, endNodePos.Z].State = NodeState.End;
 
             grid = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
             grid = gridBuffer;
@@ -560,57 +561,63 @@ namespace PathFind3D
                 Vector3i newNodePos = nodePos + direction;
 
                 // check if new GridPosition is within grid bounds
-                if (V3iLessThan(newNodePos, -Vector3i.One) || V3iGreaterThan(newNodePos, gridSize))
+
+                //logger.WriteLine($"{V3iLessThan(newNodePos, Vector3i.Zero)} || {V3iGreaterThan(newNodePos, gridSize - Vector3i.One)}");
+
+                if (V3iLessThan(newNodePos, Vector3i.Zero) || V3iGreaterThan(newNodePos, gridSize - Vector3i.One))
                 {
-                    logger.WriteLine($"skipped {newNodePos}");
+                    //logger.WriteLine($"skipped {newNodePos}");
                     continue;
                 }
-                logger.WriteLine($"{newNodePos}");
-
-                newNodePos = V3IClampToGrid(newNodePos);
-                GraphNode neighbor = grid[newNodePos.X, newNodePos.Y, newNodePos.Z];
-
-                logger.WriteLine($"{newNodePos}");
-                // skip if neighbor is already processed or in queue
-                if (closedSet.Contains(neighbor) || openSet.Contains(neighbor))
+                try
                 {
-                    continue;
-                }
-
-                // update distance from start if shorter path found
-                if (neighbor.dstFromStart >= currentNode.dstFromStart + 1 || neighbor.dstFromStart == 0)
-                {
-                    neighbor.Parent = currentNode;
-                    neighbor.dstFromStart = currentNode.dstFromStart + 1;
-                }
-
-                // check if end node is reached
-                if (neighbor.State == NodeState.End)
-                {
-                    neighbor.Parent = currentNode;
-                    continueSearch = false;
-                    openSet.Clear();
-                    closedSet.Clear();
-                    logger.WriteLine("PathFound");
-                    grid[startNodePos.X, startNodePos.Y, startNodePos.Z].Parent = null;
-                    BacktrackPath(neighbor);
-
-                    // reset open nodes to air
-                    foreach (var item in grid)
+                    GraphNode neighbor = grid[newNodePos.X, newNodePos.Y, newNodePos.Z];
+                    // skip if neighbor is already processed or in queue
+                    if (closedSet.Contains(neighbor) || openSet.Contains(neighbor))
                     {
-                        if (item.DrawMD == DrawMode.Open)
-                        {
-                            item.DrawMD = DrawMode.Air;
-                        }
+                        continue;
                     }
 
-                    return;
-                }
+                    // update distance from start if shorter path found
+                    if (neighbor.dstFromStart >= currentNode.dstFromStart + 1 || neighbor.dstFromStart == 0)
+                    {
+                        neighbor.Parent = currentNode;
+                        neighbor.dstFromStart = currentNode.dstFromStart + 1;
+                    }
 
-                // add air nodes to open set
-                if (neighbor.State == NodeState.Conductor)
+                    // check if end node is reached
+                    if (neighbor.State == NodeState.End)
+                    {
+                        neighbor.Parent = currentNode;
+                        continueSearch = false;
+                        openSet.Clear();
+                        closedSet.Clear();
+                        logger.WriteLine("PathFound");
+                        grid[startNodePos.X, startNodePos.Y, startNodePos.Z].Parent = null;
+                        BacktrackPath(neighbor);
+
+                        // reset open nodes to air
+                        foreach (var item in grid)
+                        {
+                            if (item.DrawMD == DrawMode.Open)
+                            {
+                                item.DrawMD = DrawMode.Air;
+                            }
+                        }
+
+                        return;
+                    }
+
+                    // add air nodes to open set
+                    if (neighbor.State == NodeState.Conductor)
+                    {
+                        openSet.Add(neighbor);
+                    }
+                }
+                catch (Exception)
                 {
-                    openSet.Add(neighbor);
+
+                    throw new Exception($"{(newNodePos.X, newNodePos.Y, newNodePos.Z)}");
                 }
             }
         }
@@ -665,7 +672,7 @@ namespace PathFind3D
                 Vector3i newNodePos = currentNode.GridPosition + direction;
 
                 // check if new GridPosition is within grid bounds
-                if (V3iLessThan(newNodePos, -Vector3i.One) || V3iGreaterThan(newNodePos, gridSize))
+                if (V3iLessThan(newNodePos, Vector3i.Zero) || V3iGreaterThan(newNodePos, gridSize - Vector3i.One))
                 {
                     continue;
                 }
@@ -875,12 +882,13 @@ namespace PathFind3D
 
             if (ImGui.Button("run A*"))
             {
-                grid[startNodePos.X, startNodePos.Y, startNodePos.Z].DrawMD = DrawMode.Start;
-                grid[endNodePos.X - 1, endNodePos.Y - 1, endNodePos.Z - 1].DrawMD = DrawMode.End;
 
                 // clamp start and end node positions
                 startNodePos = V3IClampToGrid(startNodePos);
                 endNodePos = V3IClampToGrid(endNodePos);
+
+                grid[startNodePos.X, startNodePos.Y, startNodePos.Z].DrawMD = DrawMode.Start;
+                grid[endNodePos.X, endNodePos.Y, endNodePos.Z].DrawMD = DrawMode.End;
 
                 AStarThread = new Thread(() =>
                 {
