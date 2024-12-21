@@ -141,14 +141,23 @@ namespace PathFind3D
 
         #region operators
 
-        public static bool V3iLessThan(Vector3i v1, Vector3i v2)
+        public static bool V3iLessThanOr(Vector3i v1, Vector3i v2)
         {
             return (v1.X < v2.X) || (v1.Y < v2.Y) || (v1.Z < v2.Z);
         }
 
-        public static bool V3iGreaterThan(Vector3i v1, Vector3i v2)
+        public static bool V3iGreaterThanOr(Vector3i v1, Vector3i v2)
         {
             return v1.X > v2.X || v1.Y > v2.Y || v1.Z > v2.Z;
+        }
+        public static bool V3iLessThanAnd(Vector3i v1, Vector3i v2)
+        {
+            return (v1.X < v2.X) && (v1.Y < v2.Y) && (v1.Z < v2.Z);
+        }
+
+        public static bool V3iGreaterThanAnd(Vector3i v1, Vector3i v2)
+        {
+            return v1.X > v2.X && v1.Y > v2.Y && v1.Z > v2.Z;
         }
 
         #endregion
@@ -351,7 +360,7 @@ namespace PathFind3D
                                             float len = new Vector3i(ii, jj, kk).EuclideanLength;
                                             Vector3i oPos = (i + ii, j + jj, k + kk);
 
-                                            bool isInGrid = V3iGreaterThan(oPos, -Vector3i.One) && V3iLessThan(oPos, gridSize);
+                                            bool isInGrid = V3iGreaterThanOr(oPos, -Vector3i.One) && V3iLessThanOr(oPos, gridSize);
 
                                             if (isInGrid)
                                             {
@@ -388,8 +397,8 @@ namespace PathFind3D
                         Vector3i oPosStart = (startNodePos.X + ii, startNodePos.Y + jj, startNodePos.Z + kk);
                         Vector3i oPosEnd = (endNodePos.X + ii, endNodePos.Y + jj, endNodePos.Z + kk);
 
-                        bool isInGridStart = V3iGreaterThan(oPosStart, -Vector3i.One) && V3iLessThan(oPosStart, gridSize);
-                        bool isInGridEnd = V3iGreaterThan(oPosEnd, -Vector3i.One) && V3iLessThan(oPosEnd, gridSize);
+                        bool isInGridStart = V3iGreaterThanOr(oPosStart, -Vector3i.One) && V3iLessThanOr(oPosStart, gridSize);
+                        bool isInGridEnd = V3iGreaterThanOr(oPosEnd, -Vector3i.One) && V3iLessThanOr(oPosEnd, gridSize);
 
                         if (isInGridStart && len < oRadius)
                         {
@@ -564,7 +573,7 @@ namespace PathFind3D
 
                 //logger.WriteLine($"{V3iLessThan(newNodePos, Vector3i.Zero)} || {V3iGreaterThan(newNodePos, gridSize - Vector3i.One)}");
 
-                if (V3iLessThan(newNodePos, Vector3i.Zero) || V3iGreaterThan(newNodePos, gridSize - Vector3i.One))
+                if (V3iLessThanOr(newNodePos, Vector3i.Zero) || V3iGreaterThanOr(newNodePos, gridSize - Vector3i.One))
                 {
                     //logger.WriteLine($"skipped {newNodePos}");
                     continue;
@@ -672,7 +681,7 @@ namespace PathFind3D
                 Vector3i newNodePos = currentNode.GridPosition + direction;
 
                 // check if new GridPosition is within grid bounds
-                if (V3iLessThan(newNodePos, Vector3i.Zero) || V3iGreaterThan(newNodePos, gridSize - Vector3i.One))
+                if (V3iLessThanOr(newNodePos, Vector3i.Zero) || V3iGreaterThanOr(newNodePos, gridSize - Vector3i.One))
                 {
                     continue;
                 }
@@ -815,6 +824,7 @@ namespace PathFind3D
         int gsX = gridSize.X, gsY = gridSize.Y, gsZ = gridSize.Z, snX = startNodePos.X, snY = startNodePos.Y, snZ = startNodePos.Z, enX = endNodePos.X, enY = endNodePos.Y, enZ = endNodePos.Z;
 
         Thread testThread;
+
         private void ProcessGUI()
         {
             ImGui.DockSpaceOverViewport(ImGui.GetMainViewport().ID, ImGui.GetMainViewport(), ImGuiDockNodeFlags.PassthruCentralNode);
@@ -831,7 +841,6 @@ namespace PathFind3D
                 logger.WriteLine(avgDispersion(grid));
             }
 
-            // gui buttons for various actions
             if (ImGui.Button("Rebuild Grid"))
             {
                 rebuildGrid();
@@ -1265,10 +1274,8 @@ namespace PathFind3D
             continueSearch = false;
         }
 
-        public void Run(Action mainLoopFunction)
+        public void Run()
         {
-            runAction = mainLoopFunction;
-
             window?.Run();
         }
 
@@ -1284,7 +1291,8 @@ namespace PathFind3D
                     Profile = ContextProfile.Compatability,
                     API = ContextAPI.OpenGL,
                     Flags = ContextFlags.Default,
-                    Vsync = VSyncMode.Adaptive
+                    Vsync = VSyncMode.On,
+                    WindowBorder = WindowBorder.Resizable
                 }
             );
 
@@ -1407,7 +1415,6 @@ namespace PathFind3D
             calculateFPS(e.Time);
             handleUserInput();
 
-            runAction?.Invoke();
         }
 
         bool chngDielectricAndConductor = false;
