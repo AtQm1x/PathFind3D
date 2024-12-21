@@ -17,7 +17,7 @@ namespace PathFind3D
                 splashScreen.Run();
                 main app = new(1280, 720, "OpenGL");
                 Thread.Sleep(2000);
-                splashScreen.Close();
+                splashScreen.Dispose();
                 Thread.Sleep(200);
                 app.Initialize();
                 app.Run();
