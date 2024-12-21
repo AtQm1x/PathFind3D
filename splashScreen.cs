@@ -26,8 +26,8 @@ namespace PathFind3D
 
         protected override void OnLoad()
         {
-            base.OnLoad();
             CenterWindow();
+            base.OnLoad();
             GL.ClearColor(new Color4(100, 149, 237, 255)); // Background color
         }
 

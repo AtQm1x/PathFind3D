@@ -500,36 +500,6 @@ namespace PathFind3D
             updateMesh = true;
         }
 
-        private void drawGrid()
-        {
-            // sort transparent objects for correct rendering
-
-            GL.UseProgram(shader.Handle);
-            var sortedGrid = grid.Cast<GraphNode>()
-                .Where(node => node?.DrawMD != DrawMode.Air && node?.DrawMD != DrawMode.Wall && node != null)
-                .OrderByDescending(node => Vector3.Distance(cameraPosition, new Vector3(node.Position.X, node.Position.X, node.Position.X)))
-                .ToList();
-
-            // draw opaque objects (walls)
-            foreach (var node in grid)
-            {
-                if (node != null)
-                {
-                    if (node.DrawMD == DrawMode.Wall && drawWalls)
-                        node.Draw(viewMatrix, projectionMatrix, shader, 36, vao[0]);
-                }
-            }
-
-            // draw transparent objects
-            foreach (var node in sortedGrid)
-            {
-                if (node != null)
-                {
-                    node?.Draw(viewMatrix, projectionMatrix, shader, 36, vao[1]);
-                }
-            }
-        }
-
         private void updateGrid()
         {
             // update rotation and aspect ratio for all visible nodes
@@ -1295,7 +1265,7 @@ namespace PathFind3D
                     WindowBorder = WindowBorder.Resizable
                 }
             );
-
+            window.CenterWindow();
             rebuildGrid();
 
             // set up event handlers
