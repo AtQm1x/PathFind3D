@@ -165,13 +165,12 @@ namespace PathFind3D
         #region global variables
 
         ImGuiController _controller;
-        private int resX;
-        private int resY;
-        private string title;
-        private Action? runAction = null;
+        private readonly int resX;
+        private readonly int resY;
+        private readonly string title;
         private GameWindow? window = null;
         private float aspectRatio = 16f / 9;
-        private float nodeDistance = 0.125f;
+        private readonly float nodeDistance = 0.125f;
         private Random rng = new(DateTime.Now.Millisecond * DateTime.Now.Second);
 
         private static Vector3i gridSize = (32, 1, 32);
@@ -192,7 +191,6 @@ namespace PathFind3D
         private List<GraphNode> openSet = new();
         private SortedSet<GraphNode> openSetSorted = new();
         private List<GraphNode> closedSet = new();
-        private GraphNode boxNode;
         private Vector3 baseSize;
         private static bool drawWalls = true;
 
@@ -296,13 +294,6 @@ namespace PathFind3D
         int criteria = oRadius + oSpacing + 1;
         private void runRebuildGridThread_Complex(ref GraphNode[,,] grid)
         {
-            // create a box node to represent the entire grid
-            boxNode = new GraphNode(Vector3i.Zero)
-            {
-                BaseSize = gridSize * new Vector3(0.125f) + new Vector3(0.01f),
-                DrawMD = DrawMode.Wireframe
-            };
-
             // recreate grid if size has changed
             if (grid.LongLength != gridSize.X * gridSize.Y * gridSize.Z)
                 grid = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
@@ -429,13 +420,6 @@ namespace PathFind3D
 
         private void runRebuildGridThread(ref GraphNode[,,] grid)
         {
-            // create a box node to represent the entire grid
-            boxNode = new GraphNode(Vector3i.Zero)
-            {
-                BaseSize = gridSize * new Vector3(0.125f) + new Vector3(0.01f),
-                DrawMD = DrawMode.Wireframe
-            };
-
             // recreate grid if size has changed
             if (grid.LongLength != gridSize.X * gridSize.Y * gridSize.Z)
                 grid = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
@@ -523,7 +507,6 @@ namespace PathFind3D
         private Vector3i V3IClampToGrid(Vector3i vec)
         {
             return V3IClamp(vec, Vector3i.Zero, gridSize - Vector3i.One);
-            return new Vector3i(Math.Clamp(vec.X, 0, gridSize.X - 1), Math.Clamp(vec.Y, 0, gridSize.Y - 1), Math.Clamp(vec.Z, 0, gridSize.Z - 1));
         }
 
         #endregion
@@ -1018,19 +1001,19 @@ namespace PathFind3D
                 if (meshData[i].vertices != null)
                 {
                     Array.Clear(meshData[i].vertices, 0, meshData[i].vertices.Length);
-                    meshData[i].vertices = null;
+                    meshData[i].vertices = new Vector3[0];
                 }
 
                 if (meshData[i].indices != null)
                 {
                     Array.Clear(meshData[i].indices, 0, meshData[i].indices.Length);
-                    meshData[i].indices = null;
+                    meshData[i].indices = new uint[0];
                 }
 
                 if (meshData[i].colors != null)
                 {
                     Array.Clear(meshData[i].colors, 0, meshData[i].colors.Length);
-                    meshData[i].colors = null;
+                    meshData[i].colors = new Vector4[0];
                 }
 
                 // Reset the struct to its default values
@@ -1042,18 +1025,15 @@ namespace PathFind3D
         {
             for (int i = 0; i < _bufferCount; i++)
             {
-                // Generate and bind the Vertex Array Object
                 GL.GenVertexArrays(1, out vao[i]);
                 GL.BindVertexArray(vao[i]);
 
-                // Vertex buffer
                 GL.GenBuffers(1, out vbo[i]);
                 GL.BindBuffer(BufferTarget.ArrayBuffer, vbo[i]);
                 GL.BufferData(BufferTarget.ArrayBuffer, meshData[i].vertices.Length * Vector3.SizeInBytes, meshData[i].vertices, BufferUsageHint.StaticDraw);
                 GL.EnableVertexAttribArray(0);
                 GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, false, Vector3.SizeInBytes, 0);
 
-                // Color buffer
                 GL.GenBuffers(1, out cbo[i]);
                 GL.BindBuffer(BufferTarget.ArrayBuffer, cbo[i]);
                 GL.BindBuffer(BufferTarget.ArrayBuffer, cbo[i]);
@@ -1061,7 +1041,6 @@ namespace PathFind3D
                 GL.EnableVertexAttribArray(1);
                 GL.VertexAttribPointer(1, 4, VertexAttribPointerType.Float, false, Vector4.SizeInBytes, 0);
 
-                // Element buffer
                 GL.GenBuffers(1, out ebo[i]);
                 GL.BindBuffer(BufferTarget.ElementArrayBuffer, ebo[i]);
                 GL.BufferData(BufferTarget.ElementArrayBuffer, meshData[i].indices.Length * sizeof(uint), meshData[i].indices, BufferUsageHint.StaticDraw);
@@ -1289,7 +1268,7 @@ namespace PathFind3D
 
             // enable face culling
             GL.Enable(EnableCap.CullFace);
-            GL.CullFace(CullFaceMode.Back);
+            GL.CullFace(TriangleFace.Back);
             GL.FrontFace(FrontFaceDirection.Cw);
 
             SetupMatrices();
@@ -1307,12 +1286,6 @@ namespace PathFind3D
             io.ConfigFlags |= ImGuiConfigFlags.ViewportsEnable;
             io.ConfigViewportsNoAutoMerge = true;
             io.ConfigViewportsNoTaskBarIcon = true;
-
-            boxNode = new GraphNode(Vector3i.Zero)
-            {
-                BaseSize = gridSize * new Vector3(0.125f) + new Vector3(0.01f),
-                DrawMD = DrawMode.Wireframe
-            };
             return true;
         }
 
@@ -1372,16 +1345,6 @@ namespace PathFind3D
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
             }
-            // update box if necessary //// what box
-            if ((boxNode?.Rotation != rot || boxNode?.AspectRatio != aspectRatio))
-            {
-                if (boxNode != null)
-                {
-                    boxNode.Rotation = rot;
-                    boxNode.AspectRatio = aspectRatio;
-                }
-            }
-
             calculateFPS(e.Time);
             handleUserInput();
 
@@ -1418,13 +1381,13 @@ namespace PathFind3D
                 GL.BindVertexArray(vao[i]);
                 shader.SetVec4("cColor", (0, 0, 0, 0));
                 // Draw filled cubes
-                GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Fill);
+                GL.PolygonMode(TriangleFace.FrontAndBack, PolygonMode.Fill);
                 GL.DrawElements(PrimitiveType.Triangles, meshData[i].indices.Length, DrawElementsType.UnsignedInt, 0);
 
                 // Draw wireframe
                 GL.LineWidth(2.0f);
                 shader.SetVec4("cColor", (0, 0, 0, 1));
-                GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Line);
+                GL.PolygonMode(TriangleFace.FrontAndBack, PolygonMode.Line);
                 GL.DrawElements(PrimitiveType.Triangles, meshData[i].indices.Length, DrawElementsType.UnsignedInt, 0);
 
                 GL.BindVertexArray(0);
