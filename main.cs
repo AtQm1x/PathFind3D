@@ -20,40 +20,10 @@ namespace PathFind3D
 
     public class main
     {
-        /*
-         *  XY   доля частинок провідника в першій провідній жилі в мометн виникання та довжина цієї жили
-         *  X    дисперсія кількості в жилі
-         *  X    дисперсія електро провідності
-         *  Y   діелектрик <> провідник 
-         *  X   поперечний розмір жили 
-         *  X   електропровідність ділянок 
-         *  X   монодисперсія 
-         */
-
-        /*
-            ПРЕЗЕНТАЦІЯ
-            Титульна Сторінка на якій буде тема
-            1)Актуальність 2)Мета
-            Основні задачі
-            засоби розв'язування задач
-
-            {
-            Технологія визначення довжини шляху
-            Технологія визначення кількості частинок в ньому
-            
-            кількість відгалужень
-
-            дисперсія і середнє значення кількості частинок в тупіках
-
-            відношення середнього до загальної кількості частинок
-            }
-        */
+        // проаналізувати для 2Д і 3Д що буде якщо враховувать торкання тільки сторонами і сторонами та ребрами
+        // до 3Д додати варіанти торкання Тільки ребрами; Тільки вершинами; Тільки вершинами І ребрами
 
         // набрати статистику
-
-
-
-        //  кількість частинок у тупіках
 
         // опис програми = задачі, результати, інструкція
 
@@ -253,23 +223,6 @@ namespace PathFind3D
         #endregion
 
         #region grid
-        private void rebuildGrid_simple()
-        {
-            // stop any ongoing search
-            continueSearch = false;
-            gridSize.X = Math.Max(gridSize.X, 1);
-            gridSize.Y = Math.Max(gridSize.Y, 1);
-            gridSize.Z = Math.Max(gridSize.Z, 1);
-            startNodePos = Vector3i.Clamp(startNodePos, Vector3i.Zero, gridSize);
-            endNodePos = Vector3i.Clamp(endNodePos, Vector3i.Zero, gridSize);
-            Thread thread = new Thread(() =>
-            {
-                runRebuildGridThread_Simple(ref grid);
-            });
-
-            thread.Start();
-            continueSearch = true;
-        }
         int type = 2;
         private void rebuildGrid()
         {
@@ -326,32 +279,40 @@ namespace PathFind3D
                         gridBuffer[i, j, k] = nd;
 
                         gridBuffer[i, j, k].canGenerate = true;
-                        gridBuffer[i, j, k].State = NodeState.Conductor;
-                        gridBuffer[i, j, k].DrawMD = DrawMode.Wall;
+                        gridBuffer[i, j, k].State = NodeState.Dielectric;
+                        gridBuffer[i, j, k].DrawMD = DrawMode.Air;
                     }
                 }
             }
 
             int total = gridSize.X * gridSize.Y * gridSize.Z;
-            int toChange = (int)(total * obstacleDensity / 100d);
+            int toChange = (int)(total * (100d - obstacleDensity) / 100d);
+            int failsafe = total * 3;
 
-            for (int i = 0; i <= toChange; i++)
-            {
-                int x = rng.Next(gridSize.X);
-                int y = rng.Next(gridSize.Y);
-                int z = rng.Next(gridSize.Z);
+            if (obstacleDensity < 100)
+                for (int i = 0; i <= toChange; i++)
+                {
+                    if (i > failsafe)
+                    {
+                        logger.WriteLine("Failsafe reached");
+                        break;
+                    }
 
-                if (gridBuffer[x, y, z].State == NodeState.Conductor)
-                {
-                    gridBuffer[x, y, z].DrawMD = DrawMode.Air;
-                    gridBuffer[x, y, z].State = NodeState.Dielectric;
-                    gridBuffer[x, y, z].canGenerate = false;
+                    int x = rng.Next(gridSize.X);
+                    int y = rng.Next(gridSize.Y);
+                    int z = rng.Next(gridSize.Z);
+
+                    if (gridBuffer[x, y, z].State == NodeState.Dielectric)
+                    {
+                        gridBuffer[x, y, z].DrawMD = DrawMode.Wall;
+                        gridBuffer[x, y, z].State = NodeState.Conductor;
+                        gridBuffer[x, y, z].canGenerate = false;
+                    }
+                    else
+                    {
+                        i--;
+                    }
                 }
-                else
-                {
-                    i--;
-                }
-            }
 
             startNodePos = V3IClampToGrid(startNodePos);
             endNodePos = V3IClampToGrid(endNodePos);
@@ -512,6 +473,24 @@ namespace PathFind3D
             updateMesh = true;
         }
 
+        private void rebuildGrid_simple()
+        {
+            // stop any ongoing search
+            continueSearch = false;
+            gridSize.X = Math.Max(gridSize.X, 1);
+            gridSize.Y = Math.Max(gridSize.Y, 1);
+            gridSize.Z = Math.Max(gridSize.Z, 1);
+            startNodePos = Vector3i.Clamp(startNodePos, Vector3i.Zero, gridSize);
+            endNodePos = Vector3i.Clamp(endNodePos, Vector3i.Zero, gridSize);
+            Thread thread = new Thread(() =>
+            {
+                runRebuildGridThread_Simple(ref grid);
+            });
+
+            thread.Start();
+            continueSearch = true;
+        }
+
         private void runRebuildGridThread_Simple(ref GraphNode[,,] grid)
         {
             // recreate grid if size has changed
@@ -607,7 +586,7 @@ namespace PathFind3D
 
         #region pathfinding
 
-        Vector3i[] usedDirections = directions;
+        Vector3i[] usedDirections = mainDirections;
         #region BFS
         private void AddNeighborsToOpenSet(GraphNode currentNode)
         {
@@ -867,6 +846,7 @@ namespace PathFind3D
         bool _configMenu_isOpen = false;
         bool _infoMenu_isOpen = false;
         bool _isMouseOverMenu = false;
+        string directionModeString = "direction mode";
 
         int gsX = gridSize.X, gsY = gridSize.Y, gsZ = gridSize.Z, snX = startNodePos.X, snY = startNodePos.Y, snZ = startNodePos.Z, enX = endNodePos.X, enY = endNodePos.Y, enZ = endNodePos.Z;
 
@@ -987,9 +967,23 @@ namespace PathFind3D
                 ImGui.Text("Obstacle Density %");
                 ImGui.InputDouble(" ", ref obstacleDensity, 1);
 
-                ImGui.Text("Dielectric Particle size");
-                ImGui.InputInt("Radius", ref oRadius);
-                ImGui.InputInt("Minimal spacing", ref oSpacing);
+                ImGui.Text("Directions");
+                if (ImGui.Button(directionModeString))
+                {
+                    if (usedDirections == mainDirections)
+                    {
+                        usedDirections = directions;
+                        directionModeString = "any";
+                    }
+                    else
+                    {
+                        usedDirections = mainDirections;
+                        directionModeString = "Face to Face";
+                    }
+                }
+                //ImGui.Text("Dielectric Particle size");
+                //ImGui.InputInt("Radius", ref oRadius);
+                //ImGui.InputInt("Minimal spacing", ref oSpacing);
 
                 if (ImGui.Button("Apply"))
                 {
@@ -1013,6 +1007,7 @@ namespace PathFind3D
                 ImGui.Text($"Concentration: {getConductorConcentration()}");
                 ImGui.Text($"Fraction of particles in the path: {getFractionOfParticlesInPath()}");
                 updateMousePos();
+                ImGui.Text($"Amount of conductor particles: {(int)(getConductorConcentration() * gridSize.X * gridSize.Y * gridSize.Z)}/{gridSize.X * gridSize.Y * gridSize.Z}");
             }
 
             ImGui.Begin("Program Log");
@@ -1169,6 +1164,69 @@ namespace PathFind3D
 
         private double percolationThreshold()
         {
+            logger.WriteLine("startingPercolationTest");
+
+            if (grid.GetLength(0) != gridSize.X || grid.GetLength(1) != gridSize.Y || grid.GetLength(2) != gridSize.Z)
+                grid = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
+
+            GraphNode[,,] gridBuffer = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
+
+            for (int i = 0; i < gridSize.X; i++)
+            {
+                for (int j = 0; j < gridSize.Y; j++)
+                {
+                    for (int k = 0; k < gridSize.Z; k++)
+                    {
+                        GraphNode nd = new((i, j, k));
+
+                        gridBuffer[i, j, k] = nd;
+
+                        gridBuffer[i, j, k].canGenerate = true;
+                        gridBuffer[i, j, k].State = NodeState.Dielectric;
+                        gridBuffer[i, j, k].DrawMD = DrawMode.Air;
+                    }
+                }
+            }
+
+            int total = gridSize.X * gridSize.Y * gridSize.Z;
+            //int toChange = (int)(total * (100d - obstacleDensity) / 100d);
+            int failsafe = total * 3;
+            bool ispercolated = false;
+
+            for (int i = 0; i <= total; i++)
+            {
+                if (i > failsafe)
+                {
+                    logger.WriteLine("Failsafe reached");
+                    break;
+                }
+
+                int x = rng.Next(gridSize.X);
+                int y = rng.Next(gridSize.Y);
+                int z = rng.Next(gridSize.Z);
+
+                if (gridBuffer[x, y, z].State == NodeState.Dielectric)
+                {
+                    gridBuffer[x, y, z].DrawMD = DrawMode.Wall;
+                    gridBuffer[x, y, z].State = NodeState.Conductor;
+                    gridBuffer[x, y, z].canGenerate = false;
+                    grid = gridBuffer;
+                    ispercolated = canPercolate();
+                }
+                else
+                {
+                    i--;
+                }
+
+                if (ispercolated)
+                {
+                    return getConductorConcentration();
+                }
+            }
+            return -1;
+        }
+        private bool canPercolate(bool rebuildMesh = true)
+        {
             bool pathFound = false;
             for (int i = 0; i < gridSize.X; i++)
             {
@@ -1193,8 +1251,8 @@ namespace PathFind3D
                 }
             }
         exitLoop:
-            updateMesh = true;
-            return pathFound ? 1 : 0;
+            updateMesh = rebuildMesh;
+            return pathFound;
         }
 
         #endregion
@@ -1371,8 +1429,6 @@ namespace PathFind3D
             baseSize = new Vector3(gridSize.X, gridSize.Y, gridSize.Z) * 0.125f + (0.01f, 0.01f, 0.01f);
 
             _controller = new ImGuiController(window.ClientSize.X, window.ClientSize.Y);
-
-            //usedDirections = mainDirections;
 
             fileINIT();
             var io = ImGui.GetIO();

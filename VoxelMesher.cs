@@ -88,16 +88,16 @@ public class VoxelMesher
                     break;
 
                 case DrawMode.Path:
-                    colors[vertexCount] = new Vector4(0, 0, 1, 0.25f);
-                    break;
-
-                case DrawMode.Open:
                     colors[vertexCount] = new Vector4(1, 1, 0, 0.25f);
                     break;
 
-                case DrawMode.Closed:
-                    colors[vertexCount] = new Vector4(1, 0, 1, 0.25f);
-                    break;
+                    //case DrawMode.Open:
+                    //    colors[vertexCount] = new Vector4(1, 1, 0, 0.25f);
+                    //    break;
+                    //
+                    //case DrawMode.Closed:
+                    //    colors[vertexCount] = new Vector4(1, 0, 1, 0.25f);
+                    //    break;
             }
             vertexCount++;
         }
