@@ -12,19 +12,19 @@ namespace PathFind3D
         public GraphNode? Parent { get; set; } = null;
         public float AspectRatio { get; set; } = 1;
         public Vector3 Rotation { get; set; } = new Vector3(0, 0, 0);
-        public Vector3 BaseSize = new Vector3(0.125f);
-
         public bool canGenerate = true;
         public NodeState State { get; set; } = NodeState.Dielectric;
         public DrawMode DrawMD { get; set; } = DrawMode.Wall;
-
-        public float dstFromStart = float.MaxValue;
         public float gScore { get; set; } = float.MaxValue;
         public float hScore { get; set; } = 0;
         public float fScore { get; set; } = float.MaxValue;
         public GraphNode(Vector3 position)
         {
             Position = position;
+        }
+        public GraphNode()
+        {
+
         }
         public GraphNode(float x, float y, float z)
         {

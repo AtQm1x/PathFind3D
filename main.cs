@@ -185,7 +185,7 @@ namespace PathFind3D
         private GraphNode[,,] grid = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
         private static Vector3 rot = new(0);
 
-        private double obstacleDensity = 0.2;
+        private double obstacleDensity = 50;
 
         private bool continueSearch = true;
         private List<GraphNode> openSet = new();
@@ -253,6 +253,119 @@ namespace PathFind3D
         #endregion
 
         #region grid
+        private void rebuildGrid_simple()
+        {
+            // stop any ongoing search
+            continueSearch = false;
+            gridSize.X = Math.Max(gridSize.X, 1);
+            gridSize.Y = Math.Max(gridSize.Y, 1);
+            gridSize.Z = Math.Max(gridSize.Z, 1);
+            startNodePos = Vector3i.Clamp(startNodePos, Vector3i.Zero, gridSize);
+            endNodePos = Vector3i.Clamp(endNodePos, Vector3i.Zero, gridSize);
+            Thread thread = new Thread(() =>
+            {
+                runRebuildGridThread_Simple(ref grid);
+            });
+
+            thread.Start();
+            continueSearch = true;
+        }
+        int type = 2;
+        private void rebuildGrid()
+        {
+            switch (type)
+            {
+                case 0:
+                    rebuildGrid_simple();
+                    break;
+                case 1:
+                    rebuildGrid_Complex();
+                    break;
+                case 2:
+                    rebuildGrid_XYZ();
+                    break;
+                default:
+                    rebuildGrid_simple();
+                    break;
+            }
+        }
+
+        private void rebuildGrid_XYZ()
+        {
+            // stop any ongoing search
+            continueSearch = false;
+            gridSize.X = Math.Max(gridSize.X, 1);
+            gridSize.Y = Math.Max(gridSize.Y, 1);
+            gridSize.Z = Math.Max(gridSize.Z, 1);
+            startNodePos = Vector3i.Clamp(startNodePos, Vector3i.Zero, gridSize);
+            endNodePos = Vector3i.Clamp(endNodePos, Vector3i.Zero, gridSize);
+            Thread thread = new Thread(() =>
+            {
+                runRebuildGridThread_XYZ(ref grid);
+            });
+
+            thread.Start();
+            continueSearch = true;
+        }
+
+        private void runRebuildGridThread_XYZ(ref GraphNode[,,] grid)
+        {
+            if (grid.GetLength(0) != gridSize.X || grid.GetLength(1) != gridSize.Y || grid.GetLength(2) != gridSize.Z)
+                grid = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
+
+            GraphNode[,,] gridBuffer = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
+
+            for (int i = 0; i < gridSize.X; i++)
+            {
+                for (int j = 0; j < gridSize.Y; j++)
+                {
+                    for (int k = 0; k < gridSize.Z; k++)
+                    {
+                        GraphNode nd = new((i, j, k));
+
+                        gridBuffer[i, j, k] = nd;
+
+                        gridBuffer[i, j, k].canGenerate = true;
+                        gridBuffer[i, j, k].State = NodeState.Conductor;
+                        gridBuffer[i, j, k].DrawMD = DrawMode.Wall;
+                    }
+                }
+            }
+
+            int total = gridSize.X * gridSize.Y * gridSize.Z;
+            int toChange = (int)(total * obstacleDensity / 100d);
+
+            for (int i = 0; i <= toChange; i++)
+            {
+                int x = rng.Next(gridSize.X);
+                int y = rng.Next(gridSize.Y);
+                int z = rng.Next(gridSize.Z);
+
+                if (gridBuffer[x, y, z].State == NodeState.Conductor)
+                {
+                    gridBuffer[x, y, z].DrawMD = DrawMode.Air;
+                    gridBuffer[x, y, z].State = NodeState.Dielectric;
+                    gridBuffer[x, y, z].canGenerate = false;
+                }
+                else
+                {
+                    i--;
+                }
+            }
+
+            startNodePos = V3IClampToGrid(startNodePos);
+            endNodePos = V3IClampToGrid(endNodePos);
+
+            gridBuffer[startNodePos.X, startNodePos.Y, startNodePos.Z].DrawMD = DrawMode.Start;
+            gridBuffer[startNodePos.X, startNodePos.Y, startNodePos.Z].State = NodeState.Start;
+
+            gridBuffer[endNodePos.X, endNodePos.Y, endNodePos.Z].DrawMD = DrawMode.End;
+            gridBuffer[endNodePos.X, endNodePos.Y, endNodePos.Z].State = NodeState.End;
+
+            grid = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
+            grid = gridBuffer;
+            updateMesh = true;
+        }
 
         private void rebuildGrid_Complex()
         {
@@ -271,23 +384,6 @@ namespace PathFind3D
             thread.Start();
             continueSearch = true;
         }
-        private void rebuildGrid()
-        {
-            // stop any ongoing search
-            continueSearch = false;
-            gridSize.X = Math.Max(gridSize.X, 1);
-            gridSize.Y = Math.Max(gridSize.Y, 1);
-            gridSize.Z = Math.Max(gridSize.Z, 1);
-            startNodePos = Vector3i.Clamp(startNodePos, Vector3i.Zero, gridSize);
-            endNodePos = Vector3i.Clamp(endNodePos, Vector3i.Zero, gridSize);
-            Thread thread = new Thread(() =>
-            {
-                runRebuildGridThread(ref grid);
-            });
-
-            thread.Start();
-            continueSearch = true;
-        }
 
         static int oRadius = 3;
         static int oSpacing = 1;
@@ -297,8 +393,6 @@ namespace PathFind3D
             // recreate grid if size has changed
             if (grid.LongLength != gridSize.X * gridSize.Y * gridSize.Z)
                 grid = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
-
-            Vector3 startOffset = (gridSize - Vector3.One) * new Vector3(nodeDistance / 2);
 
             GraphNode[,,] gridBuffer = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
 
@@ -418,7 +512,7 @@ namespace PathFind3D
             updateMesh = true;
         }
 
-        private void runRebuildGridThread(ref GraphNode[,,] grid)
+        private void runRebuildGridThread_Simple(ref GraphNode[,,] grid)
         {
             // recreate grid if size has changed
             if (grid.LongLength != gridSize.X * gridSize.Y * gridSize.Z)
@@ -541,10 +635,10 @@ namespace PathFind3D
                     }
 
                     // update distance from start if shorter path found
-                    if (neighbor.dstFromStart >= currentNode.dstFromStart + 1 || neighbor.dstFromStart == 0)
+                    if (neighbor.fScore >= currentNode.fScore + 1 || neighbor.fScore == 0)
                     {
                         neighbor.Parent = currentNode;
-                        neighbor.dstFromStart = currentNode.dstFromStart + 1;
+                        neighbor.fScore = currentNode.fScore + 1;
                     }
 
                     // check if end node is reached
@@ -890,8 +984,8 @@ namespace PathFind3D
                 ImGui.InputInt("Y  ", ref enY);
                 ImGui.InputInt("Z  ", ref enZ);
 
-                ImGui.Text("Obstacle Density");
-                ImGui.InputDouble(" ", ref obstacleDensity, 0.05);
+                ImGui.Text("Obstacle Density %");
+                ImGui.InputDouble(" ", ref obstacleDensity, 1);
 
                 ImGui.Text("Dielectric Particle size");
                 ImGui.InputInt("Radius", ref oRadius);
@@ -906,7 +1000,7 @@ namespace PathFind3D
                     startNodePos = (Math.Clamp(startNodePos.X, 0, gridSize.X - 1), Math.Clamp(startNodePos.Y, 0, gridSize.Y - 1), Math.Clamp(startNodePos.Z, 0, gridSize.Z - 1));
                     endNodePos = (Math.Clamp(endNodePos.X, 0, gridSize.X - 1), Math.Clamp(endNodePos.Y, 0, gridSize.Y - 1), Math.Clamp(endNodePos.Z, 0, gridSize.Z - 1));
 
-                    obstacleDensity = Math.Clamp(obstacleDensity, 0, 1);
+                    obstacleDensity = Math.Clamp(obstacleDensity, 0, 100);
 
                     rebuildGrid();
                 }
@@ -1193,7 +1287,7 @@ namespace PathFind3D
                     node.DrawMD = DrawMode.Air;
 
                 node.Parent = null;
-                node.dstFromStart = 0;
+                node.fScore = 0;
             }
             updateMesh = doUpdateGrid;
             continueSearch = true;
@@ -1201,6 +1295,9 @@ namespace PathFind3D
 
         public void Shutdown()
         {
+
+            exit = true;
+            continueSearch = false;
             for (int i = 0; i < _bufferCount; i++)
             {
                 GL.DeleteBuffer(vbo[i]);
@@ -1218,9 +1315,6 @@ namespace PathFind3D
             }
             logger.Stop();
             GC.Collect();
-
-            exit = true;
-            continueSearch = false;
         }
 
         public void Run()
@@ -1378,6 +1472,11 @@ namespace PathFind3D
                     continue;
                 }
 
+                //if (meshData[i] == default)
+                //{
+                //    Console.WriteLine($"meshdata[{i}] is default");
+                //}
+
                 GL.BindVertexArray(vao[i]);
                 shader.SetVec4("cColor", (0, 0, 0, 0));
                 // Draw filled cubes
@@ -1399,7 +1498,7 @@ namespace PathFind3D
 
         private void onRenderFrame(FrameEventArgs args)
         {
-            if (window == null || grid == null)
+            if (window == null || grid == null || exit)
                 return;
 
             GL.ClearColor(0.2f, 0.3f, 0.4f, 1.0f);

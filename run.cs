@@ -13,11 +13,11 @@ namespace PathFind3D
         {
 
             Console.WriteLine("run");
-            var splashScreen = new splashScreen();
-            splashScreen.Run();
+            //var splashScreen = new splashScreen();
+            //splashScreen.Run();
             main app = new(1280, 720, "OpenGL");
             app.Initialize();
-            splashScreen.Dispose();
+            //splashScreen.Dispose();
             app.Run();
             app.Shutdown();
 
