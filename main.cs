@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.Serialization;
 using System.Threading;
 using NVector2 = System.Numerics.Vector2;
 
@@ -76,7 +77,7 @@ namespace PathFind3D
             }
             return (double)countOfPathNodes / total;
         }
-        // визначити вплив відношення розмірів частинки провідника і всього виробу на можливість застосування теорії перколяції
+
         double getConductorConcentration()
         {
             int tcount = gridSize.X * gridSize.Y * gridSize.Z;
@@ -224,6 +225,7 @@ namespace PathFind3D
 
         #region grid
         int type = 2;
+        int size = 1;
         private void rebuildGrid()
         {
             switch (type)
@@ -286,27 +288,69 @@ namespace PathFind3D
             }
 
             int total = gridSize.X * gridSize.Y * gridSize.Z;
-            int toChange = (int)(total * (100d - obstacleDensity) / 100d);
-            int failsafe = total * 3;
+            var toChange = total * (100d - obstacleDensity) / 100d;
+            bool canPlaceCube = true;
 
             if (obstacleDensity < 100)
-                for (int i = 0; i <= toChange; i++)
+                for (int i = 0; i <= toChange / Math.Pow(size, 3); i++)
                 {
-                    if (i > failsafe)
-                    {
-                        logger.WriteLine("Failsafe reached");
-                        break;
-                    }
-
                     int x = rng.Next(gridSize.X);
                     int y = rng.Next(gridSize.Y);
                     int z = rng.Next(gridSize.Z);
 
                     if (gridBuffer[x, y, z].State == NodeState.Dielectric)
                     {
-                        gridBuffer[x, y, z].DrawMD = DrawMode.Wall;
-                        gridBuffer[x, y, z].State = NodeState.Conductor;
-                        gridBuffer[x, y, z].canGenerate = false;
+                        canPlaceCube = true;
+
+                        if (size > 1)
+                        {
+                            Vector3i maxBound = new Vector3i(x, y, z) + new Vector3i(size) - Vector3i.One;
+                            if (V3iLessThanAnd(maxBound, gridSize))
+                            {
+                                //Console.WriteLine(maxBound + " is inside the bound");
+                                for (int dx = 0; dx < size; dx++)
+                                {
+                                    for (int dy = 0; dy < size; dy++)
+                                    {
+                                        for (int dz = 0; dz < size; dz++)
+                                        {
+                                            if (gridBuffer[x + dx, y + dy, z + dz].State != NodeState.Dielectric)
+                                            {
+                                                canPlaceCube = false;
+                                                dx = dy = dz = size;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                canPlaceCube = false;
+                            }
+                        }
+
+                        if (canPlaceCube)
+                        {
+                            //Console.WriteLine("and is avalible");
+                            for (int dx = 0; dx < size; dx++)
+                            {
+                                for (int dy = 0; dy < size; dy++)
+                                {
+                                    for (int dz = 0; dz < size; dz++)
+                                    {
+                                        gridBuffer[x + dx, y + dy, z + dz].DrawMD = DrawMode.Wall;
+                                        gridBuffer[x + dx, y + dy, z + dz].State = NodeState.Conductor;
+                                        gridBuffer[x + dx, y + dy, z + dz].canGenerate = false;
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            //Console.WriteLine("and is NOT avalible");
+                            i--;
+                        }
+                        //logger.WriteLine($"iteration {i} at ({x}, {y}, {z}) with size {size} : {canPlaceCube}");
                     }
                     else
                     {
@@ -324,6 +368,7 @@ namespace PathFind3D
             gridBuffer[endNodePos.X, endNodePos.Y, endNodePos.Z].State = NodeState.End;
 
             grid = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
+
             grid = gridBuffer;
             updateMesh = true;
         }
@@ -967,6 +1012,11 @@ namespace PathFind3D
                 ImGui.Text("Obstacle Density %");
                 ImGui.InputDouble(" ", ref obstacleDensity, 1);
 
+                ImGui.Text("size of Conductor particles");
+                ImGui.InputInt(string.Empty, ref size, 1);
+
+                size = Math.Clamp(size, 1, 10);
+
                 ImGui.Text("Directions");
                 if (ImGui.Button(directionModeString))
                 {
@@ -1190,28 +1240,68 @@ namespace PathFind3D
 
             int total = gridSize.X * gridSize.Y * gridSize.Z;
             //int toChange = (int)(total * (100d - obstacleDensity) / 100d);
-            int failsafe = total * 3;
             bool ispercolated = false;
-
-            for (int i = 0; i <= total; i++)
+            double cubeVolume = Math.Pow(size, 3);
+            for (int i = 0; i <= total / cubeVolume; i++)
             {
-                if (i > failsafe)
-                {
-                    logger.WriteLine("Failsafe reached");
-                    break;
-                }
-
                 int x = rng.Next(gridSize.X);
                 int y = rng.Next(gridSize.Y);
                 int z = rng.Next(gridSize.Z);
 
                 if (gridBuffer[x, y, z].State == NodeState.Dielectric)
                 {
-                    gridBuffer[x, y, z].DrawMD = DrawMode.Wall;
-                    gridBuffer[x, y, z].State = NodeState.Conductor;
-                    gridBuffer[x, y, z].canGenerate = false;
-                    grid = gridBuffer;
-                    ispercolated = canPercolate();
+                    bool canPlaceCube = true;
+
+                    if (size > 1)
+                    {
+                        if (x + size - 1 < gridSize.X && y + size - 1 < gridSize.Y && z + size - 1 < gridSize.Z)
+                        {
+                            for (int dx = 0; dx < size; dx++)
+                            {
+                                for (int dy = 0; dy < size; dy++)
+                                {
+                                    for (int dz = 0; dz < size; dz++)
+                                    {
+                                        if (gridBuffer[x + dx, y + dy, z + dz].State != NodeState.Dielectric)
+                                        {
+                                            canPlaceCube = false;
+                                            dx = dy = dz = size;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            canPlaceCube = false;
+                        }
+                    }
+
+                    if (canPlaceCube)
+                    {
+                        for (int dx = 0; dx < size; dx++)
+                        {
+                            for (int dy = 0; dy < size; dy++)
+                            {
+                                for (int dz = 0; dz < size; dz++)
+                                {
+                                    gridBuffer[x + dx, y + dy, z + dz].DrawMD = DrawMode.Wall;
+                                    gridBuffer[x + dx, y + dy, z + dz].State = NodeState.Conductor;
+                                    gridBuffer[x + dx, y + dy, z + dz].canGenerate = false;
+                                }
+                            }
+                        }
+                        grid = gridBuffer;
+                        if (exit)
+                        {
+                            return (-1);
+                        }
+                        ispercolated = canPercolate();
+                    }
+                    else
+                    {
+                        i--;
+                    }
                 }
                 else
                 {
@@ -1445,7 +1535,7 @@ namespace PathFind3D
         }
 
         private VoxelMesher mesher;
-        private bool updateMesh = true;
+        private bool updateMesh = false;
         private void onUpdateFrame(FrameEventArgs e)
         {
             if (window == null)
@@ -1528,10 +1618,11 @@ namespace PathFind3D
                     continue;
                 }
 
-                //if (meshData[i] == default)
-                //{
-                //    Console.WriteLine($"meshdata[{i}] is default");
-                //}
+                if (meshData[i] == (null, null, null))
+                {
+                    Console.WriteLine($"meshdata[{i}] is default");
+                    continue;
+                }
 
                 GL.BindVertexArray(vao[i]);
                 shader.SetVec4("cColor", (0, 0, 0, 0));
