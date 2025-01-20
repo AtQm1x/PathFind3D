@@ -9,7 +9,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Runtime.Serialization;
 using System.Threading;
 using NVector2 = System.Numerics.Vector2;
 
@@ -28,37 +27,32 @@ namespace PathFind3D
 
         // опис програми = задачі, результати, інструкція
 
-        double avgDispersion(GraphNode[,,] vals)
-        {
-            double sum = 0;
-            int c = 0;
-            foreach (var node in vals)
-            {
-                c++;
-                if (node.State == NodeState.Conductor)
-                {
-                    sum++;
-                }
-                else
-                {
-                    sum--;
-                }
-            }
+        double progress = 0;
 
-            double avg = sum / c;
-            double sum2 = 0;
-            foreach (var node in vals)
+        double avgDispersion(int iters = 5)
+        {
+            dispertionLIMIT_Old = dispertionLIMIT;
+            double sum = 0;
+            double[] results = new double[iters];
+            for (int i = 0; i < iters; i++)
             {
-                if (node.State == NodeState.Conductor)
-                {
-                    sum2 += Math.Pow(1 - avg, 2);
-                }
-                else
-                {
-                    sum2 += Math.Pow(-1 - avg, 2);
-                }
+                results[i] = percolationThreshold(false);
+                sum += results[i];
+                progress = i + 1;
             }
-            return Math.Round(1 - Math.Sqrt(sum2 / vals.Length), 10);
+            double avg = sum / iters;
+
+            double dispersionSquared = 0;
+
+            for (int i = 0; i < iters; i++)
+            {
+                dispersionSquared += Math.Pow(results[i] - avg, 2);
+                logger.WriteLine($"i{i} result = {results[i]}");
+            }
+            dispersionSquared /= iters;
+            logger.WriteLine($"avarage = {avg}");
+            logger.WriteLine($"dispersionSquared = {dispersionSquared}");
+            return Math.Sqrt(dispersionSquared);
         }
 
         double getFractionOfParticlesInPath()
@@ -263,6 +257,8 @@ namespace PathFind3D
             continueSearch = true;
         }
 
+        int FAILSAFE_DEFAULT = 500;
+
         private void runRebuildGridThread_XYZ(ref GraphNode[,,] grid)
         {
             if (grid.GetLength(0) != gridSize.X || grid.GetLength(1) != gridSize.Y || grid.GetLength(2) != gridSize.Z)
@@ -291,12 +287,31 @@ namespace PathFind3D
             var toChange = total * (100d - obstacleDensity) / 100d;
             bool canPlaceCube = true;
 
+            int failsafe = FAILSAFE_DEFAULT;
+            int ilast = 0;
+
             if (obstacleDensity < 100)
                 for (int i = 0; i <= toChange / Math.Pow(size, 3); i++)
                 {
-                    int x = rng.Next(gridSize.X);
-                    int y = rng.Next(gridSize.Y);
-                    int z = rng.Next(gridSize.Z);
+                    //Console.Write($"i = {i} \n");
+                    if (i == ilast)
+                    {
+                        failsafe--;
+                        //Console.Write($"failsafe = {failsafe} \n");
+                        if (failsafe <= 0)
+                        {
+                            i++;
+                        }
+                    }
+                    else
+                    {
+                        failsafe = FAILSAFE_DEFAULT;
+                        ilast = i;
+                    }
+
+                    int x = rng.Next(gridSize.X - size + 1);
+                    int y = rng.Next(gridSize.Y - size + 1);
+                    int z = rng.Next(gridSize.Z - size + 1);
 
                     if (gridBuffer[x, y, z].State == NodeState.Dielectric)
                     {
@@ -674,7 +689,7 @@ namespace PathFind3D
                         closedSet.Clear();
                         logger.WriteLine("PathFound");
                         grid[startNodePos.X, startNodePos.Y, startNodePos.Z].Parent = null;
-                        BacktrackPath(neighbor);
+                        BacktrackPath(neighbor, true);
 
                         // reset open nodes to air
                         foreach (var item in grid)
@@ -815,7 +830,7 @@ namespace PathFind3D
                 if (currentNode.GridPosition == endPos)
                 {
                     if (logToFile) logger.WriteLine("Path found!");
-                    BacktrackPath(currentNode);
+                    BacktrackPath(currentNode, logToFile);
                     break;
                 }
 
@@ -845,7 +860,7 @@ namespace PathFind3D
         }
         #endregion
 
-        private void BacktrackPath(GraphNode endNode)
+        private void BacktrackPath(GraphNode endNode, bool doLog)
         {
             int PathLen = 0;
             GraphNode currentNode = endNode;
@@ -867,7 +882,8 @@ namespace PathFind3D
                     item.DrawMD = DrawMode.Air;
                 }
             }
-            logger.WriteLine($"Path length: {MathF.Round(endNode.gScore, 3) - 1}");
+            if (doLog)
+                logger.WriteLine($"Path length: {MathF.Round(endNode.gScore, 3) - 1}");
             updateGrid();
         }
 
@@ -893,7 +909,9 @@ namespace PathFind3D
         bool _isMouseOverMenu = false;
         string directionModeString = "direction mode";
 
-        int gsX = gridSize.X, gsY = gridSize.Y, gsZ = gridSize.Z, snX = startNodePos.X, snY = startNodePos.Y, snZ = startNodePos.Z, enX = endNodePos.X, enY = endNodePos.Y, enZ = endNodePos.Z;
+        int[] gsXYZ = { gridSize.X, gridSize.Y, gridSize.Z };
+        int[] snXYZ = { startNodePos.X, startNodePos.Y, startNodePos.Z };
+        int[] enXYZ = { endNodePos.X, endNodePos.Y, endNodePos.Z };
 
         Thread testThread;
 
@@ -908,9 +926,14 @@ namespace PathFind3D
             mousePos = ImGui.GetMousePos();
             updateMousePos();
 
-            if (ImGui.Button("test deviation"))
+            if (ImGui.Button("get avg dispersion"))
             {
-                logger.WriteLine(avgDispersion(grid));
+                testThread = new Thread(() =>
+                {
+                    logger.WriteLine("avg dispersion = " + avgDispersion(dispertionLIMIT));
+                });
+
+                testThread.Start();
             }
 
             if (ImGui.Button("Rebuild Grid"))
@@ -995,27 +1018,32 @@ namespace PathFind3D
                 updateMousePos();
 
                 ImGui.Text("Grid Size");
-                ImGui.InputInt("X", ref gsX);
-                ImGui.InputInt("Y", ref gsY);
-                ImGui.InputInt("Z", ref gsZ);
+                ImGui.InputInt3("XYZ", ref gsXYZ[0]);
+
+                gsXYZ[0] = Math.Max(1, gsXYZ[0]);
+                gsXYZ[1] = Math.Max(1, gsXYZ[1]);
+                gsXYZ[2] = Math.Max(1, gsXYZ[2]);
 
                 ImGui.Text("Start Node");
-                ImGui.InputInt("X ", ref snX);
-                ImGui.InputInt("Y ", ref snY);
-                ImGui.InputInt("Z ", ref snZ);
+                ImGui.InputInt3("XYZ ", ref snXYZ[0]);
 
                 ImGui.Text("End Node");
-                ImGui.InputInt("X  ", ref enX);
-                ImGui.InputInt("Y  ", ref enY);
-                ImGui.InputInt("Z  ", ref enZ);
+                ImGui.InputInt3("XYZ  ", ref enXYZ[0]);
 
                 ImGui.Text("Obstacle Density %");
                 ImGui.InputDouble(" ", ref obstacleDensity, 1);
 
-                ImGui.Text("size of Conductor particles");
-                ImGui.InputInt(string.Empty, ref size, 1);
+                ImGui.Text("Size of Conductor particles");
+                ImGui.InputInt("  ", ref size, 1);
+
+                ImGui.Text("iterations to determine\n avg dispersion");
+                ImGui.InputInt("   ", ref dispertionLIMIT, 1);
 
                 size = Math.Clamp(size, 1, 10);
+                size = Math.Clamp(size, 1, gsXYZ[0]);
+                size = Math.Clamp(size, 1, gsXYZ[1]);
+                size = Math.Clamp(size, 1, gsXYZ[2]);
+
 
                 ImGui.Text("Directions");
                 if (ImGui.Button(directionModeString))
@@ -1037,9 +1065,9 @@ namespace PathFind3D
 
                 if (ImGui.Button("Apply"))
                 {
-                    gridSize = new(gsX, gsY, gsZ);
-                    startNodePos = new(snX, snY, snZ);
-                    endNodePos = new(enX, enY, enZ);
+                    gridSize = new(gsXYZ[0], gsXYZ[1], gsXYZ[2]);
+                    startNodePos = new(snXYZ[0], snXYZ[1], snXYZ[2]);
+                    endNodePos = new(enXYZ[0], enXYZ[1], enXYZ[2]);
 
                     startNodePos = (Math.Clamp(startNodePos.X, 0, gridSize.X - 1), Math.Clamp(startNodePos.Y, 0, gridSize.Y - 1), Math.Clamp(startNodePos.Z, 0, gridSize.Z - 1));
                     endNodePos = (Math.Clamp(endNodePos.X, 0, gridSize.X - 1), Math.Clamp(endNodePos.Y, 0, gridSize.Y - 1), Math.Clamp(endNodePos.Z, 0, gridSize.Z - 1));
@@ -1058,6 +1086,9 @@ namespace PathFind3D
                 ImGui.Text($"Fraction of particles in the path: {getFractionOfParticlesInPath()}");
                 updateMousePos();
                 ImGui.Text($"Amount of conductor particles: {(int)(getConductorConcentration() * gridSize.X * gridSize.Y * gridSize.Z)}/{gridSize.X * gridSize.Y * gridSize.Z}");
+                progress = Math.Clamp(progress, 0, dispertionLIMIT_Old);
+                ImGui.Text($"Task Progress:");
+                ImGui.ProgressBar((float)progress / dispertionLIMIT_Old, new(300, 30));
             }
 
             ImGui.Begin("Program Log");
@@ -1212,9 +1243,10 @@ namespace PathFind3D
 
         #region fizykaaaaaaaaaaaaa
 
-        private double percolationThreshold()
+        private double percolationThreshold(bool doLog = true)
         {
-            logger.WriteLine("startingPercolationTest");
+            if (doLog)
+                logger.WriteLine("starting Percolation Test");
 
             if (grid.GetLength(0) != gridSize.X || grid.GetLength(1) != gridSize.Y || grid.GetLength(2) != gridSize.Z)
                 grid = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z];
@@ -1242,11 +1274,31 @@ namespace PathFind3D
             //int toChange = (int)(total * (100d - obstacleDensity) / 100d);
             bool ispercolated = false;
             double cubeVolume = Math.Pow(size, 3);
+
+            //int ilast = 0;
+            //int failsafe = FAILSAFE_DEFAULT * 2;
+
             for (int i = 0; i <= total / cubeVolume; i++)
             {
-                int x = rng.Next(gridSize.X);
-                int y = rng.Next(gridSize.Y);
-                int z = rng.Next(gridSize.Z);
+                ////Console.Write($"i = {i} \n");
+                //if (i == ilast)
+                //{
+                //    failsafe--;
+                //    //Console.Write($"failsafe = {failsafe} \n");
+                //    if (failsafe <= 0)
+                //    {
+                //        i++;
+                //    }
+                //}
+                //else
+                //{
+                //    failsafe = FAILSAFE_DEFAULT;
+                //    ilast = i;
+                //}
+
+                int x = rng.Next(gridSize.X - size + 1);
+                int y = rng.Next(gridSize.Y - size + 1);
+                int z = rng.Next(gridSize.Z - size + 1);
 
                 if (gridBuffer[x, y, z].State == NodeState.Dielectric)
                 {
@@ -1296,7 +1348,7 @@ namespace PathFind3D
                         {
                             return (-1);
                         }
-                        ispercolated = canPercolate();
+                        ispercolated = canPercolate(false, doLog);
                     }
                     else
                     {
@@ -1315,7 +1367,7 @@ namespace PathFind3D
             }
             return -1;
         }
-        private bool canPercolate(bool rebuildMesh = true)
+        private bool canPercolate(bool rebuildMesh = true, bool doLog = true)
         {
             bool pathFound = false;
             for (int i = 0; i < gridSize.X; i++)
@@ -1330,7 +1382,7 @@ namespace PathFind3D
                         {
                             if (grid[k, l, gridSize.Z - 1].State != NodeState.Conductor)
                                 continue;
-                            if (AStar((i, j, 0), (k, l, gridSize.Z - 1), false, false))
+                            if (AStar((i, j, 0), (k, l, gridSize.Z - 1), false, doLog))
                             {
                                 pathFound = true;
                                 goto exitLoop;
@@ -1591,6 +1643,9 @@ namespace PathFind3D
         }
 
         bool chngDielectricAndConductor = false;
+        int dispertionLIMIT = 5;
+        int dispertionLIMIT_Old = 5;
+
         private static void useMeshRender()
         {
             GL.Enable(EnableCap.DepthTest);
@@ -1627,13 +1682,13 @@ namespace PathFind3D
                 GL.BindVertexArray(vao[i]);
                 shader.SetVec4("cColor", (0, 0, 0, 0));
                 // Draw filled cubes
-                GL.PolygonMode(TriangleFace.FrontAndBack, PolygonMode.Fill);
+                GL.PolygonMode(TriangleFace.FrontAndBack, OpenTK.Graphics.OpenGL.PolygonMode.Fill);
                 GL.DrawElements(PrimitiveType.Triangles, meshData[i].indices.Length, DrawElementsType.UnsignedInt, 0);
 
                 // Draw wireframe
                 GL.LineWidth(2.0f);
                 shader.SetVec4("cColor", (0, 0, 0, 1));
-                GL.PolygonMode(TriangleFace.FrontAndBack, PolygonMode.Line);
+                GL.PolygonMode(TriangleFace.FrontAndBack, OpenTK.Graphics.OpenGL.PolygonMode.Line);
                 GL.DrawElements(PrimitiveType.Triangles, meshData[i].indices.Length, DrawElementsType.UnsignedInt, 0);
 
                 GL.BindVertexArray(0);
