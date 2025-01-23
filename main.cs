@@ -31,6 +31,7 @@ namespace PathFind3D
 
         double avgDispersion(int iters = 5)
         {
+            progress = 0;
             dispertionLIMIT_Old = dispertionLIMIT;
             double sum = 0;
             double[] results = new double[iters];
@@ -50,9 +51,11 @@ namespace PathFind3D
                 logger.WriteLine($"i{i} result = {results[i]}");
             }
             dispersionSquared /= iters;
-            logger.WriteLine($"avarage = {avg}");
+            double avgDispersion = Math.Sqrt(dispersionSquared);
+            logger.WriteLine($"average = {avg}");
             logger.WriteLine($"dispersionSquared = {dispersionSquared}");
-            return Math.Sqrt(dispersionSquared);
+            logger.WriteLine($"average / avgDispersion = {avg / avgDispersion}");
+            return avgDispersion;
         }
 
         double getFractionOfParticlesInPath()
@@ -689,7 +692,7 @@ namespace PathFind3D
                         closedSet.Clear();
                         logger.WriteLine("PathFound");
                         grid[startNodePos.X, startNodePos.Y, startNodePos.Z].Parent = null;
-                        BacktrackPath(neighbor, true);
+                        BacktrackPath(neighbor, true, grid);
 
                         // reset open nodes to air
                         foreach (var item in grid)
@@ -760,8 +763,10 @@ namespace PathFind3D
         #endregion
 
         #region A*
-        private void AddNeighborsToOpenSortedSet(GraphNode currentNode, Vector3i endNodePos, PriorityQueue<GraphNode, float> openSet, HashSet<GraphNode> closedSet)
+        private void AddNeighborsToOpenSortedSet(GraphNode currentNode, Vector3i endNodePos, PriorityQueue<GraphNode, float> openSet, HashSet<GraphNode> closedSet, GraphNode[,,] grid)
         {
+            Vector3i gridSize = new(grid.GetLength(0), grid.GetLength(1), grid.GetLength(2));
+
             foreach (Vector3i direction in usedDirections)
             {
                 Vector3i newNodePos = currentNode.GridPosition + direction;
@@ -806,7 +811,7 @@ namespace PathFind3D
             }
         }
 
-        public bool AStar(Vector3i startPos, Vector3i endPos, bool updateGrid = true, bool logToFile = true)
+        public bool AStar(Vector3i startPos, Vector3i endPos, GraphNode[,,] grid, bool updateGrid = true, bool logToFile = true)
         {
             Stopwatch stopwatch = new Stopwatch();
             stopwatch.Start();
@@ -830,7 +835,7 @@ namespace PathFind3D
                 if (currentNode.GridPosition == endPos)
                 {
                     if (logToFile) logger.WriteLine("Path found!");
-                    BacktrackPath(currentNode, logToFile);
+                    BacktrackPath(currentNode, logToFile, grid);
                     break;
                 }
 
@@ -843,7 +848,7 @@ namespace PathFind3D
                     {
                         currentNode.DrawMD = DrawMode.Closed;
                     }
-                    AddNeighborsToOpenSortedSet(currentNode, endPos, openSet, closedSet);
+                    AddNeighborsToOpenSortedSet(currentNode, endPos, openSet, closedSet, grid);
                 }
             }
 
@@ -860,7 +865,7 @@ namespace PathFind3D
         }
         #endregion
 
-        private void BacktrackPath(GraphNode endNode, bool doLog)
+        private void BacktrackPath(GraphNode endNode, bool doLog, GraphNode[,,] grid)
         {
             int PathLen = 0;
             GraphNode currentNode = endNode;
@@ -996,7 +1001,7 @@ namespace PathFind3D
 
                 AStarThread = new Thread(() =>
                 {
-                    AStar(startNodePos, endNodePos);
+                    AStar(startNodePos, endNodePos, grid);
                 });
 
                 AStarThread.Start();
@@ -1271,31 +1276,11 @@ namespace PathFind3D
             }
 
             int total = gridSize.X * gridSize.Y * gridSize.Z;
-            //int toChange = (int)(total * (100d - obstacleDensity) / 100d);
             bool ispercolated = false;
             double cubeVolume = Math.Pow(size, 3);
 
-            //int ilast = 0;
-            //int failsafe = FAILSAFE_DEFAULT * 2;
-
             for (int i = 0; i <= total / cubeVolume; i++)
             {
-                ////Console.Write($"i = {i} \n");
-                //if (i == ilast)
-                //{
-                //    failsafe--;
-                //    //Console.Write($"failsafe = {failsafe} \n");
-                //    if (failsafe <= 0)
-                //    {
-                //        i++;
-                //    }
-                //}
-                //else
-                //{
-                //    failsafe = FAILSAFE_DEFAULT;
-                //    ilast = i;
-                //}
-
                 int x = rng.Next(gridSize.X - size + 1);
                 int y = rng.Next(gridSize.Y - size + 1);
                 int z = rng.Next(gridSize.Z - size + 1);
@@ -1348,6 +1333,7 @@ namespace PathFind3D
                         {
                             return (-1);
                         }
+                        Console.WriteLine("i = " + i);
                         ispercolated = canPercolate(false, doLog);
                     }
                     else
@@ -1370,29 +1356,44 @@ namespace PathFind3D
         private bool canPercolate(bool rebuildMesh = true, bool doLog = true)
         {
             bool pathFound = false;
+
+            GraphNode[,,] nGrid = new GraphNode[gridSize.X, gridSize.Y, gridSize.Z + 2];
+
             for (int i = 0; i < gridSize.X; i++)
             {
                 for (int j = 0; j < gridSize.Y; j++)
                 {
-                    if (grid[i, j, 0].State != NodeState.Conductor)
-                        continue;
-                    for (int k = 0; k < gridSize.X; k++)
+                    for (int k = 0; k < gridSize.Z + 2; k++)
                     {
-                        for (int l = 0; l < gridSize.Y; l++)
+                        if (k == 0)
                         {
-                            if (grid[k, l, gridSize.Z - 1].State != NodeState.Conductor)
-                                continue;
-                            if (AStar((i, j, 0), (k, l, gridSize.Z - 1), false, doLog))
+                            nGrid[i, j, k] = new GraphNode(i, j, k)
                             {
-                                pathFound = true;
-                                goto exitLoop;
-                            }
-                            clearPath(false);
+                                GridPosition = new(i, j, k),
+                                State = NodeState.Conductor,
+                                DrawMD = DrawMode.Start
+                            };
+                        }
+                        else if (k == gridSize.Z + 1)
+                        {
+                            nGrid[i, j, k] = new GraphNode(i, j, k)
+                            {
+                                GridPosition = new(i, j, k),
+                                State = NodeState.Conductor,
+                                DrawMD = DrawMode.End
+                            };
+                        }
+                        else
+                        {
+                            nGrid[i, j, k] = grid[i, j, k - 1];
                         }
                     }
                 }
             }
-        exitLoop:
+
+            pathFound = AStar((gridSize.X / 2, gridSize.Y / 2, 0), (gridSize.X / 2, gridSize.Y / 2, gridSize.Z + 1), nGrid, false, doLog);
+            Console.WriteLine(pathFound);
+
             updateMesh = rebuildMesh;
             return pathFound;
         }
@@ -1438,7 +1439,7 @@ namespace PathFind3D
                 grid[newendNodePos.X, newendNodePos.Y, newendNodePos.Z].DrawMD = DrawMode.End;
                 AStarThread = new Thread(() =>
                 {
-                    AStar(newstartNodePos, newendNodePos);
+                    AStar(newstartNodePos, newendNodePos, grid);
                 });
 
                 AStarThread.Start();
