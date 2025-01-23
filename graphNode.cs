@@ -26,10 +26,6 @@ namespace PathFind3D
         {
 
         }
-        public GraphNode(float x, float y, float z)
-        {
-            Position = new Vector3(x, y, z);
-        }
 
         public GraphNode(Vector3i GridPosition)
         {

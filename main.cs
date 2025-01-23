@@ -760,24 +760,25 @@ namespace PathFind3D
             updateMesh = true;
             updateVBOs();
         }
-        #endregion
-
-        #region A*
         private void AddNeighborsToOpenSortedSet(GraphNode currentNode, Vector3i endNodePos, PriorityQueue<GraphNode, float> openSet, HashSet<GraphNode> closedSet, GraphNode[,,] grid)
         {
             Vector3i gridSize = new(grid.GetLength(0), grid.GetLength(1), grid.GetLength(2));
+            //logger.WriteLine($"Adding neighbors for node at {currentNode.GridPosition}");
+
+            string a = "";
 
             foreach (Vector3i direction in usedDirections)
             {
                 Vector3i newNodePos = currentNode.GridPosition + direction;
 
                 // check if new GridPosition is within grid bounds
-                if (V3iLessThanOr(newNodePos, Vector3i.Zero) || V3iGreaterThanOr(newNodePos, gridSize - Vector3i.One))
+                if (V3iLessThanOr(newNodePos, Vector3i.Zero) || V3iGreaterThanOr(newNodePos, gridSize - Vector3i.One) || newNodePos == currentNode.GridPosition)
                 {
                     continue;
                 }
 
                 GraphNode neighbor = grid[newNodePos.X, newNodePos.Y, newNodePos.Z];
+                a += "neighrour: " + neighbor.GridPosition + "; ";
 
                 // skip if neighbor is in closed set or is a wall
                 if (closedSet.Contains(neighbor) || neighbor.State == NodeState.Dielectric)
@@ -809,6 +810,7 @@ namespace PathFind3D
                     }
                 }
             }
+            //Console.WriteLine(a);
         }
 
         public bool AStar(Vector3i startPos, Vector3i endPos, GraphNode[,,] grid, bool updateGrid = true, bool logToFile = true)
@@ -827,9 +829,12 @@ namespace PathFind3D
             startNode.fScore = startNode.hScore;
             openSet.Enqueue(startNode, startNode.fScore);
 
+            //logger.WriteLine($"Starting A* search from {startPos} to {endPos}");
+
             while (openSet.Count > 0)
             {
                 GraphNode currentNode = openSet.Dequeue();
+                //logger.WriteLine($"Processing node at {currentNode.GridPosition}");
 
                 // check if reached the end node
                 if (currentNode.GridPosition == endPos)
@@ -857,6 +862,8 @@ namespace PathFind3D
             stopwatch.Stop();
             if (openSet.Count == 0)
             {
+                if (logToFile)
+                    logger.WriteLine("No path found.");
                 return false;
             }
             if (logToFile) logger.WriteLine($"A* execution time: {elapsedTime.TotalMilliseconds} ms");
@@ -864,7 +871,6 @@ namespace PathFind3D
             return true;
         }
         #endregion
-
         private void BacktrackPath(GraphNode endNode, bool doLog, GraphNode[,,] grid)
         {
             int PathLen = 0;
@@ -1333,7 +1339,7 @@ namespace PathFind3D
                         {
                             return (-1);
                         }
-                        Console.WriteLine("i = " + i);
+                        //Console.WriteLine("i = " + i);
                         ispercolated = canPercolate(false, doLog);
                     }
                     else
@@ -1348,6 +1354,7 @@ namespace PathFind3D
 
                 if (ispercolated)
                 {
+                    updateMesh = true;
                     return getConductorConcentration();
                 }
             }
@@ -1363,30 +1370,28 @@ namespace PathFind3D
             {
                 for (int j = 0; j < gridSize.Y; j++)
                 {
-                    for (int k = 0; k < gridSize.Z + 2; k++)
+                    nGrid[i, j, 0] = new GraphNode((i, j, 0))
                     {
-                        if (k == 0)
-                        {
-                            nGrid[i, j, k] = new GraphNode(i, j, k)
-                            {
-                                GridPosition = new(i, j, k),
-                                State = NodeState.Conductor,
-                                DrawMD = DrawMode.Start
-                            };
-                        }
-                        else if (k == gridSize.Z + 1)
-                        {
-                            nGrid[i, j, k] = new GraphNode(i, j, k)
-                            {
-                                GridPosition = new(i, j, k),
-                                State = NodeState.Conductor,
-                                DrawMD = DrawMode.End
-                            };
-                        }
-                        else
-                        {
-                            nGrid[i, j, k] = grid[i, j, k - 1];
-                        }
+                        State = NodeState.Conductor,
+                        DrawMD = DrawMode.Wall
+                    };
+
+                    nGrid[i, j, gridSize.Z + 1] = new GraphNode((i, j, gridSize.Z + 1))
+                    {
+                        State = NodeState.Conductor,
+                        DrawMD = DrawMode.Wall
+                    };
+                }
+            }
+
+            for (int i = 0; i < gridSize.X; i++)
+            {
+                for (int j = 0; j < gridSize.Y; j++)
+                {
+                    for (int k = 1; k <= gridSize.Z; k++)
+                    {
+                        nGrid[i, j, k] = grid[i, j, k - 1];
+                        nGrid[i, j, k].GridPosition = (i, j, k);
                     }
                 }
             }
