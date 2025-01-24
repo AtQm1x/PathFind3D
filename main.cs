@@ -452,7 +452,7 @@ namespace PathFind3D
                             double rng_d = rng.NextDouble();
                             if (rng_d >= obstacleDensity)
                             {
-                                logger.WriteLine(rng_d);
+                                //logger.WriteLine(rng_d);
                                 gridBuffer[i, j, k].DrawMD = DrawMode.Air;
                                 gridBuffer[i, j, k].State = NodeState.Dielectric;
                                 gridBuffer[i, j, k].canGenerate = true;
@@ -763,9 +763,6 @@ namespace PathFind3D
         private void AddNeighborsToOpenSortedSet(GraphNode currentNode, Vector3i endNodePos, PriorityQueue<GraphNode, float> openSet, HashSet<GraphNode> closedSet, GraphNode[,,] grid)
         {
             Vector3i gridSize = new(grid.GetLength(0), grid.GetLength(1), grid.GetLength(2));
-            //logger.WriteLine($"Adding neighbors for node at {currentNode.GridPosition}");
-
-            string a = "";
 
             foreach (Vector3i direction in usedDirections)
             {
@@ -778,7 +775,6 @@ namespace PathFind3D
                 }
 
                 GraphNode neighbor = grid[newNodePos.X, newNodePos.Y, newNodePos.Z];
-                a += "neighrour: " + neighbor.GridPosition + "; ";
 
                 // skip if neighbor is in closed set or is a wall
                 if (closedSet.Contains(neighbor) || neighbor.State == NodeState.Dielectric)
@@ -810,7 +806,6 @@ namespace PathFind3D
                     }
                 }
             }
-            //Console.WriteLine(a);
         }
 
         public bool AStar(Vector3i startPos, Vector3i endPos, GraphNode[,,] grid, bool updateGrid = true, bool logToFile = true)
@@ -829,12 +824,9 @@ namespace PathFind3D
             startNode.fScore = startNode.hScore;
             openSet.Enqueue(startNode, startNode.fScore);
 
-            //logger.WriteLine($"Starting A* search from {startPos} to {endPos}");
-
             while (openSet.Count > 0)
             {
                 GraphNode currentNode = openSet.Dequeue();
-                //logger.WriteLine($"Processing node at {currentNode.GridPosition}");
 
                 // check if reached the end node
                 if (currentNode.GridPosition == endPos)
@@ -918,7 +910,7 @@ namespace PathFind3D
         bool _configMenu_isOpen = false;
         bool _infoMenu_isOpen = false;
         bool _isMouseOverMenu = false;
-        string directionModeString = "direction mode";
+        string directionModeString = "Face only";
 
         int[] gsXYZ = { gridSize.X, gridSize.Y, gridSize.Z };
         int[] snXYZ = { startNodePos.X, startNodePos.Y, startNodePos.Z };
@@ -937,7 +929,7 @@ namespace PathFind3D
             mousePos = ImGui.GetMousePos();
             updateMousePos();
 
-            if (ImGui.Button("get avg dispersion"))
+            if (ImGui.Button("Get avg dispersion"))
             {
                 testThread = new Thread(() =>
                 {
@@ -952,7 +944,7 @@ namespace PathFind3D
                 rebuildGrid();
             }
 
-            if (ImGui.Button("test can percolate"))
+            if (ImGui.Button("Percolation Threshold"))
             {
                 testThread = new Thread(() =>
                 {
@@ -967,7 +959,7 @@ namespace PathFind3D
                 drawWalls = !drawWalls;
             }
 
-            if (ImGui.Button("change draw modes"))
+            if (ImGui.Button("Change draw modes"))
             {
                 chngDielectricAndConductor = !chngDielectricAndConductor;
                 updateMesh = true;
@@ -978,7 +970,7 @@ namespace PathFind3D
                 clearPath();
             }
 
-            if (ImGui.Button("run BFS"))
+            if (ImGui.Button("Run BFS"))
             {
                 startNodePos = V3IClampToGrid(startNodePos);
                 endNodePos = V3IClampToGrid(endNodePos);
@@ -995,7 +987,7 @@ namespace PathFind3D
                 }
             }
 
-            if (ImGui.Button("run A*"))
+            if (ImGui.Button("Run A*"))
             {
 
                 // clamp start and end node positions
@@ -1047,7 +1039,7 @@ namespace PathFind3D
                 ImGui.Text("Size of Conductor particles");
                 ImGui.InputInt("  ", ref size, 1);
 
-                ImGui.Text("iterations to determine\n avg dispersion");
+                ImGui.Text("Iterations to determine\n avg dispersion");
                 ImGui.InputInt("   ", ref dispertionLIMIT, 1);
 
                 size = Math.Clamp(size, 1, 10);
@@ -1056,18 +1048,18 @@ namespace PathFind3D
                 size = Math.Clamp(size, 1, gsXYZ[2]);
 
 
-                ImGui.Text("Directions");
+                ImGui.Text("Used direction set");
                 if (ImGui.Button(directionModeString))
                 {
                     if (usedDirections == mainDirections)
                     {
                         usedDirections = directions;
-                        directionModeString = "any";
+                        directionModeString = "Face-Edge-Vertex";
                     }
                     else
                     {
                         usedDirections = mainDirections;
-                        directionModeString = "Face to Face";
+                        directionModeString = "Face only";
                     }
                 }
                 //ImGui.Text("Dielectric Particle size");
@@ -1397,7 +1389,6 @@ namespace PathFind3D
             }
 
             pathFound = AStar((gridSize.X / 2, gridSize.Y / 2, 0), (gridSize.X / 2, gridSize.Y / 2, gridSize.Z + 1), nGrid, false, doLog);
-            Console.WriteLine(pathFound);
 
             updateMesh = rebuildMesh;
             return pathFound;
