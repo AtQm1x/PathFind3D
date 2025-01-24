@@ -36,8 +36,8 @@ namespace PathFind3D
 
         private static bool KHRDebugAvailable = false;
 
-        private int GLVersion;
-        private bool CompatibilityProfile;
+        private readonly int GLVersion;
+        private readonly bool CompatibilityProfile;
 
         /// <summary>
         /// Constructs a new ImGuiController.
@@ -164,7 +164,7 @@ void main()
         public void RecreateFontDeviceTexture()
         {
             ImGuiIOPtr io = ImGui.GetIO();
-            io.Fonts.GetTexDataAsRGBA32(out IntPtr pixels, out int width, out int height, out int bytesPerPixel);
+            io.Fonts.GetTexDataAsRGBA32(out IntPtr pixels, out int width, out int height, out _);
 
             int mips = (int)Math.Floor(Math.Log(Math.Max(width, height), 2));
 
@@ -242,7 +242,7 @@ void main()
             io.DeltaTime = deltaSeconds; // DeltaTime is in seconds.
         }
 
-        readonly List<char> PressedChars = new List<char>();
+        readonly List<char> PressedChars = new();
 
         private void UpdateImGuiInput(GameWindow wnd)
         {
@@ -297,6 +297,7 @@ void main()
 
         private void RenderImDrawData(ImDrawDataPtr draw_data)
         {
+
             if (draw_data.CmdListsCount == 0)
             {
                 return;
@@ -336,15 +337,16 @@ void main()
             //    }
             //}
 
-            if (GLVersion <= 310 || CompatibilityProfile)
+            if (GLVersion <= 310)
             {
-                GL.PolygonMode(MaterialFace.Front, PolygonMode.Fill);
-                GL.PolygonMode(MaterialFace.Back, PolygonMode.Fill);
+                GL.PolygonMode(TriangleFace.Front, PolygonMode.Fill);
+                GL.PolygonMode(TriangleFace.Back, PolygonMode.Fill);
             }
             else
             {
-                GL.PolygonMode(MaterialFace.FrontAndBack, PolygonMode.Fill);
+                GL.PolygonMode(TriangleFace.FrontAndBack, PolygonMode.Fill);
             }
+
 
             // Bind the element buffer (thru the VAO) so that we can resize it.
             GL.BindVertexArray(_vertexArray);
@@ -467,12 +469,12 @@ void main()
             if (prevScissorTestEnabled) GL.Enable(EnableCap.ScissorTest); else GL.Disable(EnableCap.ScissorTest);
             if (GLVersion <= 310 || CompatibilityProfile)
             {
-                GL.PolygonMode(MaterialFace.Front, (PolygonMode)prevPolygonMode[0]);
-                GL.PolygonMode(MaterialFace.Back, (PolygonMode)prevPolygonMode[1]);
+                GL.PolygonMode(TriangleFace.Front, (PolygonMode)prevPolygonMode[0]);
+                GL.PolygonMode(TriangleFace.Back, (PolygonMode)prevPolygonMode[1]);
             }
             else
             {
-                GL.PolygonMode(MaterialFace.FrontAndBack, (PolygonMode)prevPolygonMode[0]);
+                GL.PolygonMode(TriangleFace.FrontAndBack, (PolygonMode)prevPolygonMode[0]);
             }
         }
 

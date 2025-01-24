@@ -1,29 +1,25 @@
 ﻿using OpenTK.Graphics.OpenGL;
 using System;
+using System.Runtime.CompilerServices;
+using System.Threading;
+using System.Threading.Channels;
 
 namespace PathFind3D
 {
+    // main app = new(1280, 720, "OpenGL");
     public class OpenTKProgram
     {
         public static void Main()
         {
-            main app = new(1280, 720, "OpenGL");
+
             Console.WriteLine("run");
-
+            //var splashScreen = new splashScreen();
+            //splashScreen.Run();
+            main app = new(1280, 720, "OpenGL");
             app.Initialize();
-
-            ExecuteApp_Clear(app);
-
+            //splashScreen.Dispose();
+            app.Run();
             app.Shutdown();
-        }
-
-        static void ExecuteApp_Clear(main app)
-        {
-            app.Run(() =>
-            {
-                GL.ClearColor(0.2f, 0.3f, 0.4f, 1.0f);
-                GL.Clear(ClearBufferMask.ColorBufferBit);
-            });
 
         }
     }
