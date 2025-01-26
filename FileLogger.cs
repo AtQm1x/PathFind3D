@@ -9,7 +9,7 @@ public class FileLogger
     private readonly string _logFilePath;
     private readonly ConcurrentQueue<string> _logQueue = new ConcurrentQueue<string>();
     private readonly CancellationTokenSource _cts = new CancellationTokenSource();
-    private Task _logWriterTask;
+    private Task _logWriterTask = new Task(() => { });
 
     public FileLogger(string logFilePath)
     {
@@ -56,7 +56,7 @@ public class FileLogger
             {
                 try
                 {
-                    while (_logQueue.TryDequeue(out string logMessage))
+                    while (_logQueue.TryDequeue(out string? logMessage))
                     {
                         await WriteToFileAsync(logMessage);
                     }
